@@ -1,10 +1,11 @@
 const authService = require("./service");
+const { db } = require("../../config/database");
 
 // ==========================
 // MANUAL SIGNUP
 // ==========================
 exports.signupManual = async (req, res) => {
-  const { full_name, phone, email, password } = req.body;
+  const { full_name, phone, email, password, role } = req.body;
 
   if (!full_name || !phone || !email || !password) {
     return res.status(400).json({ error: "All fields are required" });
@@ -15,7 +16,8 @@ exports.signupManual = async (req, res) => {
     if (existingUser)
       return res.status(409).json({ error: "Email already registered" });
 
-    const userId = await authService.createUser(full_name, phone, email);
+    const userRole = role || "customer";
+    const userId = await authService.createUser(full_name, phone, email, userRole);
     await authService.createAuthRecord(userId, email, password);
 
     res.status(201).json({ message: "User registered successfully" });
@@ -50,7 +52,7 @@ exports.loginManual = async (req, res) => {
       role: user.user_role,
     });
 
-    res.json({ message: "Login successful", token });
+    res.json({ message: "Login successful", token, user: { id: user.user_id, email: user.email, role: user.user_role } });
   } catch (err) {
     console.error("Login error:", err);
     res.status(500).json({ error: "Server error during login" });
@@ -123,14 +125,30 @@ exports.setRole = async (req, res) => {
 // ==========================
 exports.getCurrentUser = async (req, res) => {
   try {
-    const [rows] = await db.query("SELECT * FROM users WHERE email = ?", [
-      req.firebaseUser.email,
-    ]);
-    res.json({
-      firebaseUser: req.firebaseUser,
-      customJWT: req.customJwt,
-      userProfile: rows[0],
-    });
+    // Handle both Firebase and regular JWT authentication
+    if (req.firebaseUser) {
+      // Firebase authentication
+      const email = req.firebaseUser.email;
+      const [rows] = await db.query("SELECT * FROM users WHERE email = ?", [email]);
+      return res.json({
+        firebaseUser: req.firebaseUser,
+        customJWT: req.customJwt,
+        userProfile: rows[0],
+        user: rows[0],
+      });
+    } else if (req.user) {
+      // Regular JWT authentication
+      const [rows] = await db.query("SELECT * FROM users WHERE user_id = ? OR email = ?", [
+        req.user.user_id,
+        req.user.email,
+      ]);
+      return res.json({
+        user: rows[0],
+        userProfile: rows[0],
+      });
+    } else {
+      return res.status(401).json({ error: "Not authenticated" });
+    }
   } catch (error) {
     console.error("Error getting user:", error);
     res.status(500).json({ error: "Database error" });

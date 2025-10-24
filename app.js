@@ -1,13 +1,9 @@
-const admin = require("firebase-admin");
 const express = require("express");
 require("dotenv").config();
 const cors = require("cors");
-const mysql = require("mysql2/promise");
-const helmet = require("helmet"); //Enhances security by setting various HTTP response headers
-const morgan = require("morgan"); //Middleware for logging details about incoming HTTP requests
+const helmet = require("helmet");
+const morgan = require("morgan");
 const port = process.env.PORT || 4000;
-const { query } = require("./config/database");
-//const salonRoutes = require("./routes/salonRoutes");
 const authRoutes = require("./modules/auth/routes");
 const staffRoutes = require("./modules/staff/routes")
 const { db, testConnection } = require("./config/database");

@@ -1,5 +1,5 @@
 const express=require('express');
-import { verifyFirebaseToken } from "../middleware/firebaseAuth.js";
+const { verifyFirebaseToken } = require("../middleware/firebaseAuth");
 const router=express.Router();
 const db=require('../database');
 const salonController=require('../controllers/salonControllers');

@@ -9,6 +9,7 @@ const port = process.env.PORT || 3000;
 const db = require('./config/database');
 //const salonRoutes = require("./routes/salonRoutes");
 const authRoutes = require("./modules/auth/routes")
+const appointmentRoutes = require("./modules/appointments/routes")
 
 const app = express();
 
@@ -25,6 +26,7 @@ app.get('/health', (req, res) => {
 });
 
 app.use('/api/auth',authRoutes)
+app.use('/api/appointments', appointmentRoutes)
 
 app.use((req,res)=>{
   res.status(404).json({error:"Not found"});

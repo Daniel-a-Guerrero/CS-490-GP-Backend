@@ -26,7 +26,7 @@ exports.verifyFirebaseToken = async (req, res, next) => {
       id: decodedToken.uid,
       email: user.email,
       phone: user.phone,
-      role: user.role
+      role: user.user_role
     };
     //Onto next middleware
     next();

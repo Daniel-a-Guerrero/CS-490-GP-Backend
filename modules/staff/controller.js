@@ -30,3 +30,30 @@ exports.getStaff=(req,res)=>{
     catch{console.error("Fetching staff error:", err);
     res.status(500).json({ error: "Server error getting staff" });}
 }
+exports.getStaffEfficiency=(req,res)=>{
+    try{
+        const id=req.params.id
+        const staffEfficiency=staffService.staffEfficiency(id)
+        return res.status(200).json({efficiency:staffEfficiency})
+    }
+    catch{console.error("Fetching staff error:", err);
+    res.status(500).json({ error: "Server error getting staff" });}
+}
+exports.getStaffRevenue=(req,res)=>{
+    try{
+        const id=req.params.id
+        const staffRev=staffService.staffRevenue(id)
+        return res.status(200).json({revenue:staffRev})
+    }
+    catch{console.error("Fetching staff error:", err);
+    res.status(500).json({ error: "Server error getting staff" });}
+}
+exports.addStaff=(req,res)=>{
+    try{
+        const {staff_id, user_id, role, specialization}=req.body
+        const makeStaff=staffService.addStaff(staff_id, user_id, role, specialization)
+        return res.status(201).json({makeStaff})
+    }
+    catch{console.error("Create staff error:", err);
+    res.status(500).json({ error: "Server error making staff" });}
+}

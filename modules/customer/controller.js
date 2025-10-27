@@ -1,5 +1,5 @@
 // customer/controller.js
-const Customer = require('./model');
+const Customer = require('./service');
 
 
 // GET /api/customers

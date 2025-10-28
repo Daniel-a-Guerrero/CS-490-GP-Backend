@@ -122,8 +122,52 @@ router.post("/set-role", async (req, res) => {
   }
 });
 
-// Firebase-protected routes
-router.get("/me", authenticateUser, authController.getCurrentUser);
-router.post("/logout", authenticateUser, authController.logout);
+// Middleware that handles both JWT and Firebase authentication
+const flexibleAuth = async (req, res, next) => {
+  const authHeader = req.headers.authorization || "";
+  
+  if (!authHeader || !authHeader.startsWith("Bearer ")) {
+    return res.status(401).json({ error: "Missing or invalid token" });
+  }
+
+  const token = authHeader.split("Bearer ")[1];
+
+  try {
+    // Try Firebase authentication first
+    const decoded = await admin.auth().verifyIdToken(token);
+    req.firebaseUser = decoded;
+    req.customJwt = jwt.sign(
+      { uid: decoded.uid, email: decoded.email },
+      process.env.JWT_SECRET,
+      { expiresIn: "1h" }
+    );
+    return next();
+  } catch (firebaseErr) {
+    // If Firebase fails, try regular JWT
+    try {
+      const decoded = jwt.verify(token, process.env.JWT_SECRET);
+      req.user = decoded;
+      return next();
+    } catch (jwtErr) {
+      console.error("Authentication failed:", jwtErr);
+      return res.status(401).json({ 
+        error: "Invalid or expired token",
+        message: "Authentication failed" 
+      });
+    }
+  }
+};
+
+// Protected routes that work with both authentication methods
+router.get("/me", flexibleAuth, authController.getCurrentUser);
+router.post("/logout", flexibleAuth, (req, res) => {
+  res.json({ message: "Logged out successfully" });
+});
+
+// 2FA routes - require authentication (use flexibleAuth to support both JWT and Firebase)
+router.get("/2fa/status", flexibleAuth, authController.get2FAStatusController);
+router.post("/2fa/enable", flexibleAuth, authController.enable2FA);
+router.post("/2fa/disable", flexibleAuth, authController.disable2FA);
+router.post("/verify-2fa", authController.verify2FA);
 
 module.exports = router;

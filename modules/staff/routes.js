@@ -5,9 +5,11 @@ const staffController = require("./controller");
 
 router.get("/count",staffController.getStaffCount)
 router.get("/avg",staffController.getStaffAvgRev)
-router.get("/staff",staffController.getStaff)
+router.get("/staff/:sid",staffController.getStaff)
 router.get("/efficiency/:id",staffController.getStaffEfficiency)
+router.get("/efficiency",staffController.getAvgEfficiency)
 router.get("/revenue/:id",staffController.getStaffRevenue)
 
 router.post("/staff",staffController.addStaff)
 router.put("/staff/:id",staffController.editStaff)
+module.exports=router

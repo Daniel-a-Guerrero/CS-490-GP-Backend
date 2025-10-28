@@ -164,4 +164,10 @@ router.post("/logout", flexibleAuth, (req, res) => {
   res.json({ message: "Logged out successfully" });
 });
 
+// 2FA routes - require authentication (use flexibleAuth to support both JWT and Firebase)
+router.get("/2fa/status", flexibleAuth, authController.get2FAStatusController);
+router.post("/2fa/enable", flexibleAuth, authController.enable2FA);
+router.post("/2fa/disable", flexibleAuth, authController.disable2FA);
+router.post("/verify-2fa", authController.verify2FA);
+
 module.exports = router;

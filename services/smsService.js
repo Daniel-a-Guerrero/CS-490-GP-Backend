@@ -1,4 +1,10 @@
-const twilio = require('twilio');
+let twilio;
+try {
+  twilio = require('twilio');
+} catch (err) {
+  twilio = null;
+  console.warn('Twilio package not installed');
+}
 
 class SMSService {
     constructor() {

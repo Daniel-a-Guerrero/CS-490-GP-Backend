@@ -1,3 +1,4 @@
+//staff/routes.js
 const express = require("express");
 const router = express.Router();
 const staffController = require("./controller");
@@ -9,3 +10,4 @@ router.get("/efficiency/:id",staffController.getStaffEfficiency)
 router.get("/revenue/:id",staffController.getStaffRevenue)
 
 router.post("/staff",staffController.addStaff)
+router.put("/staff/:id",staffController.editStaff)

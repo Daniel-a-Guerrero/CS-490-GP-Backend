@@ -9,6 +9,7 @@ const port = process.env.PORT || 4000;
 const { query } = require("./config/database");
 //const salonRoutes = require("./routes/salonRoutes");
 const authRoutes = require("./modules/auth/routes");
+const staffRoutes= require("./modules/staff/routes")
 const { db, testConnection } = require("./config/database");
 
 const app = express();
@@ -28,6 +29,7 @@ app.get("/health", (req, res) => {
 });
 
 app.use("/api/auth", authRoutes);
+app.use("/api/staff",staffRoutes)
 
 app.use((req, res) => {
   res.status(404).json({ error: "Not found" });

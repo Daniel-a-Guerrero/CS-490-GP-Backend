@@ -1,3 +1,4 @@
+//staff/controllers.js
 const staffService = require("./service");
 
 exports.getStaffCount=(req,res)=>{
@@ -50,10 +51,19 @@ exports.getStaffRevenue=(req,res)=>{
 }
 exports.addStaff=(req,res)=>{
     try{
-        const {staff_id, user_id, role, specialization}=req.body
-        const makeStaff=staffService.addStaff(staff_id, user_id, role, specialization)
-        return res.status(201).json({makeStaff})
+        const {salon_id, user_id, role, specialization}=req.body
+        const makeStaff=staffService.addStaff(salon_id, user_id, role, specialization)
     }
     catch{console.error("Create staff error:", err);
     res.status(500).json({ error: "Server error making staff" });}
+}
+exports.editStaff=(req,res)=>{
+    try{
+        const { id } = req.params;
+        const {salon_id, user_id, role, specialization} = req.body;
+        const editedStaff=staffService.editStaff(id, salon_id, user_id, role, specialization)
+        return res.status(200).json({makeStaff})
+    }
+    catch{console.error("Edit staff error:", err);
+    res.status(500).json({ error: "Server error editing staff" });}
 }

@@ -1,16 +1,18 @@
 const express = require("express");
 const router = express.Router();
-const authController = require('./controller');
-const authenticateUser = require('../../middleware/firebaseAuth');
-
-router.get('/test',authController.miscel);
+const authController = require("./controller");
+const { authenticateUser } = require("../../middleware/firebaseAuth");
+const { verifyCustomJwt } = require("../../middleware/verifyCustomJwt");
+const jwt = require("jsonwebtoken");
+const admin = require("../../config/firebaseAdmin");
+const { db } = require("../../config/database");
 
 // =============================
 // MANUAL EMAIL + PASSWORD AUTH
 // =============================
 
-//router.get('/me', authenticateUser, authController.getCurrentUser);
-router.post('/logout', authController.logout);
+router.post("/signup", authController.signupManual);
+router.post("/login", authController.loginManual);
 
 router.get("/profile", verifyCustomJwt, (req, res) => {
   res.json({

@@ -1,15 +1,15 @@
-const admin =require("firebase-admin");
-const express = require('express');
-require('dotenv').config();
-const cors = require('cors');
-const mysql = require('mysql2/promise');
-const helmet = require('helmet'); //Enhances security by setting various HTTP response headers
-const morgan = require('morgan'); //Middleware for logging details about incoming HTTP requests
-const port = process.env.PORT || 3000;
-const db = require('./config/database');
+const admin = require("firebase-admin");
+const express = require("express");
+require("dotenv").config();
+const cors = require("cors");
+const mysql = require("mysql2/promise");
+const helmet = require("helmet"); //Enhances security by setting various HTTP response headers
+const morgan = require("morgan"); //Middleware for logging details about incoming HTTP requests
+const port = process.env.PORT || 4000;
+const { query } = require("./config/database");
 //const salonRoutes = require("./routes/salonRoutes");
 const authRoutes = require("./modules/auth/routes");
-const staffRoutes= require("./modules/staff/routes")
+const staffRoutes = require("./modules/staff/routes")
 const { db, testConnection } = require("./config/database");
 
 const app = express();
@@ -29,7 +29,7 @@ app.get("/health", (req, res) => {
 });
 
 app.use("/api/auth", authRoutes);
-app.use("/api/staff",staffRoutes)
+app.use("/api/staff", staffRoutes)
 
 app.use((req, res) => {
   res.status(404).json({ error: "Not found" });
@@ -45,13 +45,14 @@ app.use((err, req, res, next) => {
   });
 });
 
-const startServer=async()=>{
-  try{
-    /*const dbCon=await db.testConnection()
-    if(!dbCon){
-      console.error("Failed to connect. Now exiting")
-      process.exit()
-    }*/
+const startServer = async () => {
+  try {
+    const connected = await testConnection();
+    if (!connected) {
+      console.error(" Database connection failed. Exiting...");
+      process.exit(1);
+    }
+
     app.listen(port, () => {
       console.log(` Server is running on port ${port}`);
       console.log(`Environment: ${process.env.NODE_ENV || "development"}`);

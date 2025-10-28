@@ -1,49 +1,142 @@
-const express = require('express');
-const router = express.Router();
-const pool = require('../../config/database');
-const {firebaseSignIn, firebaseSignUp} = require('./service')
+const authService = require("./service");
 
-exports.login=async (req,res)=>{
-    try{
-    const {userEmail, passWord}=req.body
-    if(!(userEmail&&passWord)){
-        return res.status(400).json({ error: 'Must enter Username and password' });
-    }
-    const result=await firebaseSignIn(userEmail,passWord)
-    res.status(200).json({token: result.idToken, user:result.user})
-    }catch(error){
-        console.error("Login error ",error)
-        if(error.message==="INVALID_PASSWORD"||error.message==="EMAIL_NOT_FOUND"){
-            return res.status(401).json({ error: 'Invalid email or password' });
-        }
-        return res.status(500).json({error:"login failed"})
-    }
-}
-exports.signup=async(req,res)=>{
-    try{
-        const {full_name, phone, userEmail, passWord, role }=req.body
-        console.log(req.body)
-        if(!(full_name&& phone&& userEmail&& passWord&& role)){
-            return res.status(400).json({ error: 'Must enter all proper information' });
-        }
+// ==========================
+// MANUAL SIGNUP
+// ==========================
+exports.signupManual = async (req, res) => {
+  const { full_name, phone, email, password } = req.body;
 
-        const result=await firebaseSignUp(full_name, phone, userEmail, passWord, role);
-        res.status(201).json({result})
-    }catch(error){
-        console.error("Signin error ",error)
-        return res.status(500).json({error:error.message})
-    }
-}
-exports.logout=async(req,res)=>{
-    try{
-        return res.status(200).json({message: 'Logged out successfully' });
-    }
-    catch(error){
-        console.error("Sign out error ",error)
-        return res.status(500).json({error:error.message})
-    }
-}
+  if (!full_name || !phone || !email || !password) {
+    return res.status(400).json({ error: "All fields are required" });
+  }
 
-exports.miscel = async(req,res)=>{
-    res.send('Hello world')
-}
+  try {
+    const existingUser = await authService.findUserByEmail(email);
+    if (existingUser)
+      return res.status(409).json({ error: "Email already registered" });
+
+    const userId = await authService.createUser(full_name, phone, email);
+    await authService.createAuthRecord(userId, email, password);
+
+    res.status(201).json({ message: "User registered successfully" });
+  } catch (err) {
+    console.error("Signup error:", err);
+    res.status(500).json({ error: "Server error during signup" });
+  }
+};
+
+// ==========================
+// MANUAL LOGIN
+// ==========================
+exports.loginManual = async (req, res) => {
+  const { email, password } = req.body;
+  if (!email || !password)
+    return res.status(400).json({ error: "Email and password required" });
+
+  try {
+    const user = await authService.findUserByEmail(email);
+    if (!user) return res.status(404).json({ error: "User not found" });
+
+    const valid = await authService.verifyPassword(
+      password,
+      user.password_hash
+    );
+    if (!valid) return res.status(401).json({ error: "Invalid password" });
+
+    await authService.updateLoginStats(user.user_id);
+    const token = authService.generateJwtToken({
+      user_id: user.user_id,
+      email: user.email,
+      role: user.user_role,
+    });
+
+    res.json({ message: "Login successful", token });
+  } catch (err) {
+    console.error("Login error:", err);
+    res.status(500).json({ error: "Server error during login" });
+  }
+};
+
+// ==========================
+// FIREBASE VERIFY
+// ==========================
+exports.verifyFirebase = async (req, res) => {
+  try {
+    const authHeader = req.headers.authorization || "";
+    const idToken = authHeader.startsWith("Bearer ")
+      ? authHeader.split(" ")[1]
+      : null;
+
+    if (!idToken)
+      return res.status(401).json({ error: "Missing Firebase token" });
+
+    const decoded = await authService.verifyFirebaseToken(idToken);
+    const { uid, email } = decoded;
+
+    // check if already exists
+    const existingUser = await authService.findFirebaseUser(uid, email);
+    if (existingUser) {
+      const token = authService.generateAppJwt({
+        user_id: existingUser.user_id,
+        email,
+        role: existingUser.user_role,
+      });
+      return res.json({
+        existingUser: true,
+        token,
+        role: existingUser.user_role,
+      });
+    }
+
+    // new user
+    return res.json({ newUser: true, firebaseUid: uid, email });
+  } catch (err) {
+    console.error("Firebase verification failed:", err);
+    res.status(401).json({ error: "Invalid Firebase token" });
+  }
+};
+
+// ==========================
+// SET ROLE
+// ==========================
+exports.setRole = async (req, res) => {
+  try {
+    const { firebaseUid, email, role } = req.body;
+    if (!firebaseUid || !email || !role)
+      return res.status(400).json({ error: "Missing fields" });
+
+    const userId = await authService.createFirebaseUser(
+      firebaseUid,
+      email,
+      role
+    );
+    const token = authService.generateAppJwt({ user_id: userId, email, role });
+    res.status(201).json({ token, role });
+  } catch (err) {
+    console.error("Error setting role:", err);
+    res.status(500).json({ error: "Server error while setting role" });
+  }
+};
+
+// ==========================
+// CURRENT USER + LOGOUT
+// ==========================
+exports.getCurrentUser = async (req, res) => {
+  try {
+    const [rows] = await db.query("SELECT * FROM users WHERE email = ?", [
+      req.firebaseUser.email,
+    ]);
+    res.json({
+      firebaseUser: req.firebaseUser,
+      customJWT: req.customJwt,
+      userProfile: rows[0],
+    });
+  } catch (error) {
+    console.error("Error getting user:", error);
+    res.status(500).json({ error: "Database error" });
+  }
+};
+
+exports.logout = async (req, res) => {
+  res.json({ message: "Logged out successfully" });
+};

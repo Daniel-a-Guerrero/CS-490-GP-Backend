@@ -1,19 +1,31 @@
-const mysql = require('mysql2/promise');
-require('dotenv').config();
+// config/database.js
+const mysql = require("mysql2/promise");
+require("dotenv").config();
+
+// Create a connection pool
 const pool = mysql.createPool({
-    user: process.env.DB_USER, 
-    password: process.env.DB_PASSWORD, 
-    host:process.env.DB_HOST,
-    port:process.env.DB_PORT || 3306,
-    database: process.env.DB_NAME,
-    waitForConnections: true,
-    connectionLimit: 10,
-    queueLimit: 0
+  host: process.env.MYSQL_HOST || "localhost",
+  user: process.env.MYSQL_USER || "root",
+  password: process.env.MYSQL_PASSWORD || "",
+  database: process.env.MYSQL_DATABASE || "salon_platform",
+  waitForConnections: true,
+  connectionLimit: 10,
+  queueLimit: 0,
 });
 
-async function query(sql, params) {
-  const [rows] = await pool.execute(sql, params);
-  return rows;
+async function testConnection() {
+  try {
+    const conn = await pool.getConnection();
+    console.log("Database connected successfully");
+    conn.release();
+    return true;
+  } catch (err) {
+    console.error("Database connection failed:", err.message);
+    return false;
+  }
 }
 
-module.exports = { query };
+module.exports = {
+  db: pool,
+  testConnection,
+};

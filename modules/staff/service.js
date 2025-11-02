@@ -158,6 +158,18 @@ const [rows] = await db.query(sq, params);
   }
   return rows[0];
 }
+exports.totalRevenue=async(salon_id)=>{
+    const [rows]=await db.query(`use salon_platform3;
+ select st.salon_id, SUM(p.amount)
+ from staff st
+ join appointments a on a.staff_id = st.staff_id
+  join payments p on p.appointment_id=a.appointment_id
+ where st.salon_id=?
+          AND a.status = 'completed'
+          AND p.payment_status = 'completed'
+ group by st.salon_id`,[salon_id])
+ return rows.length ? rows[0].total : 0;
+}
 exports.addStaff=async(salon, user, role, specialization)=>{
     const [result]=await db.query(`INSERT INTO
         staff

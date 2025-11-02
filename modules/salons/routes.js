@@ -13,5 +13,5 @@ router.get('/user/visit-history', verifyFirebaseToken, salonController.getUserVi
 router.post('/newSalon',(req, res)=>{console.log(`In progress`)})
 
 //Maybe move elsewhere, only for admin
-router.put('/salon/:sID', verifyFirebaseToken, salonController)
+router.put('/salon/:sID', verifyFirebaseToken, salonController.verifySalon)
 module.exports=router;

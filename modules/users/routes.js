@@ -21,14 +21,6 @@ router.get(
   userController.getCustomers
 );
 
-// Admin or Owner: get customers for a specific salon
-router.get(
-  "/customers/:salon_id",
-  verifyCustomJwt,
-  checkRole("admin", "owner"),
-  userController.getSalonCustomers
-);
-
 // Admin or self: view single user
 router.get(
   "/:id",

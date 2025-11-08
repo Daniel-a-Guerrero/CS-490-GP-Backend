@@ -67,11 +67,7 @@ exports.loginManual = async (req, res) => {
 
       const method = twoFactorStatus[0].method;
       if (method === "sms") {
-        const result = await authService.sendSMSCode(
-          user.user_id,
-          user.phone,
-          user.full_name
-        );
+        await authService.sendSMSCode(user.user_id, user.phone, user.full_name);
 
         return res.status(200).json({
           message: "2FA verification required",
@@ -80,14 +76,16 @@ exports.loginManual = async (req, res) => {
           method: "sms",
         });
       }
+
       return res.status(200).json({
         message: "2FA verification required",
         requires2FA: true,
         tempToken,
-        method: method,
+        method,
       });
     }
 
+    // ✅ Regular login (no 2FA)
     await authService.updateLoginStats(user.user_id);
     const token = authService.generateJwtToken({
       user_id: user.user_id,
@@ -95,6 +93,16 @@ exports.loginManual = async (req, res) => {
       role: user.user_role,
     });
 
+    // ✅ Set secure HTTP-only cookie for middleware + persistence
+    res.cookie("token", token, {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === "production", // HTTPS only in production
+      sameSite: "lax",
+      maxAge: 60 * 60 * 1000, // 1 hour
+      path: "/", // cookie valid on all routes
+    });
+
+    // ✅ Also return JSON body (frontend may still use token locally)
     res.json({
       message: "Login successful",
       token,

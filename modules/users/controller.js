@@ -1,5 +1,8 @@
 const userService = require("./service");
 
+/**
+ * Create a new user (customer or staff)
+ */
 const createUser = async (req, res) => {
   try {
     const { full_name, phone, email, user_role, salon_id } = req.body;
@@ -30,6 +33,9 @@ const createUser = async (req, res) => {
   }
 };
 
+/**
+ * Get all users (admin only)
+ */
 const getAllUsers = async (req, res) => {
   try {
     const users = await userService.getAllUsers();
@@ -40,6 +46,9 @@ const getAllUsers = async (req, res) => {
   }
 };
 
+/**
+ * Get all customers (admin or owner)
+ */
 const getCustomers = async (req, res) => {
   try {
     const customers = await userService.getCustomers();
@@ -50,10 +59,8 @@ const getCustomers = async (req, res) => {
   }
 };
 
-const { db } = require("../../config/database");
-
 /**
- * Get customers for a specific salon
+ * Get all customers belonging to a specific salon
  */
 const getSalonCustomers = async (req, res) => {
   try {
@@ -63,22 +70,17 @@ const getSalonCustomers = async (req, res) => {
       return res.status(400).json({ error: "Salon ID is required" });
     }
 
-    const [rows] = await db.query(
-      `SELECT DISTINCT u.user_id, u.full_name, u.email, u.phone, sc.joined_at
-         FROM salon_customers sc
-         JOIN users u ON sc.user_id = u.user_id
-        WHERE sc.salon_id = ?
-        ORDER BY sc.joined_at DESC`,
-      [salonId]
-    );
-
-    res.json(rows);
+    const customers = await userService.getSalonCustomers(salonId);
+    res.json(customers);
   } catch (error) {
     console.error("Error fetching salon customers:", error);
     res.status(500).json({ error: "Failed to fetch salon customers" });
   }
 };
 
+/**
+ * Get a single user by ID
+ */
 const getUserById = async (req, res) => {
   try {
     const { id } = req.params;
@@ -91,6 +93,9 @@ const getUserById = async (req, res) => {
   }
 };
 
+/**
+ * Update a user
+ */
 const updateUser = async (req, res) => {
   try {
     const { id } = req.params;
@@ -105,6 +110,9 @@ const updateUser = async (req, res) => {
   }
 };
 
+/**
+ * Delete a user
+ */
 const deleteUser = async (req, res) => {
   try {
     const { id } = req.params;
@@ -121,9 +129,9 @@ const deleteUser = async (req, res) => {
 module.exports = {
   createUser,
   getAllUsers,
+  getCustomers,
+  getSalonCustomers,
   getUserById,
   updateUser,
   deleteUser,
-  getCustomers,
-  getSalonCustomers,
 };

@@ -1,12 +1,12 @@
-const express = require('express');
+const express = require("express");
 const router = express.Router();
-const appointmentController = require('./controller');
-const { verifyFirebaseToken } = require('../../middleware/firebaseAuth');
+const appointmentController = require("./controller");
+const { verifyAnyToken } = require("../../middleware/verifyAnyTokens");
 
-router.post('/', verifyFirebaseToken, appointmentController.createAppointment);
-router.get('/', verifyFirebaseToken, appointmentController.getUserAppointments);
-router.get('/:id', verifyFirebaseToken, appointmentController.getAppointmentById);
-router.put('/:id', verifyFirebaseToken, appointmentController.updateAppointment);
-router.delete('/:id', verifyFirebaseToken, appointmentController.cancelAppointment);
+router.post("/", verifyAnyToken, appointmentController.createAppointment);
+router.get("/", verifyAnyToken, appointmentController.getUserAppointments);
+router.get("/:id", verifyAnyToken, appointmentController.getAppointmentById);
+router.put("/:id", verifyAnyToken, appointmentController.updateAppointment);
+router.delete("/:id", verifyAnyToken, appointmentController.cancelAppointment);
 
 module.exports = router;

@@ -5,7 +5,8 @@ const helmet = require("helmet");
 const morgan = require("morgan");
 const port = process.env.PORT || 4000;
 const authRoutes = require("./modules/auth/routes");
-const staffRoutes = require("./modules/staff/routes")
+const staffRoutes = require("./modules/staff/routes");
+const userRoutes = require("./modules/users/routes");
 const { db, testConnection } = require("./config/database");
 
 const app = express();
@@ -25,7 +26,8 @@ app.get("/health", (req, res) => {
 });
 
 app.use("/api/auth", authRoutes);
-app.use("/api/staff", staffRoutes)
+app.use("/api/staff", staffRoutes);
+app.use("/api/users", userRoutes);
 
 app.use((req, res) => {
   res.status(404).json({ error: "Not found" });

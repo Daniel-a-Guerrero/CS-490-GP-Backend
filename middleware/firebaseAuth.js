@@ -4,15 +4,44 @@ const { db } = require("../config/database");
 require("dotenv").config();
 
 /**
- * Middleware: authenticateUser
- * ---------------------------------
- * 1. Reads Firebase token from Authorization header
- * 2. Verifies it via Firebase Admin
- * 3. Optionally looks up user in database
- * 4. Generates your custom JWT
- * 5. Attaches decoded Firebase user + custom token to req
+ * =============================
+ * MANUAL JWT AUTHENTICATION
+ * =============================
  */
-const authenticateUser = async (req, res, next) => {
+exports.verifyCustomJwt = (req, res, next) => {
+  const authHeader = req.headers.authorization || "";
+  const token = authHeader.startsWith("Bearer ")
+    ? authHeader.split(" ")[1]
+    : null;
+
+  if (!token) {
+    return res.status(401).json({ error: "Missing token" });
+  }
+
+  try {
+    const decoded = jwt.verify(token, process.env.JWT_SECRET);
+
+    // Attach consistent user object
+    req.user = {
+      id: decoded.user_id,
+      email: decoded.email,
+      role: decoded.role,
+    };
+
+    next();
+  } catch (err) {
+    console.error("Manual JWT verification failed:", err);
+    res.status(403).json({ error: "Invalid or expired token" });
+  }
+};
+
+/**
+ * =============================
+ * FIREBASE AUTH (NO DB LOOKUP)
+ * =============================
+ * For cases where you just need Firebase identity verified.
+ */
+exports.authenticateUser = async (req, res, next) => {
   try {
     const authHeader = req.headers.authorization || "";
     const idToken = authHeader.startsWith("Bearer ")
@@ -23,89 +52,83 @@ const authenticateUser = async (req, res, next) => {
       return res.status(401).json({ error: "Missing Firebase token" });
     }
 
-    // Verify Firebase ID token
     const decoded = await admin.auth().verifyIdToken(idToken);
-    req.firebaseUser = decoded; // save user info for controller access
+    req.firebaseUser = decoded;
 
-    // Optionally, create your own JWT for internal use
-    const customJwt = jwt.sign(
+    // Optionally, create internal custom JWT
+    req.customJwt = jwt.sign(
       { uid: decoded.uid, email: decoded.email },
       process.env.JWT_SECRET,
       { expiresIn: "1h" }
     );
-    req.customJwt = customJwt;
 
-    next(); // move on to next middleware or controller
+    next();
   } catch (err) {
     console.error("Firebase authentication failed:", err);
-    
-    if (err.code === 'auth/id-token-expired') {
-      return res.status(401).json({ 
-        error: 'Token expired', 
-        message: 'Please log in again' 
+
+    if (err.code === "auth/id-token-expired") {
+      return res.status(401).json({
+        error: "Token expired",
+        message: "Please log in again",
       });
     }
-    
-    res.status(401).json({ 
+
+    res.status(401).json({
       error: "Invalid or expired Firebase token",
-      message: "Authentication failed"
+      message: "Authentication failed",
     });
   }
 };
 
 /**
- * Middleware: verifyFirebaseToken
- * ---------------------------------
- * Same as authenticateUser but also looks up user in database
- * and attaches user info to req.user
+ * =============================
+ * FIREBASE AUTH (WITH DB LOOKUP)
+ * =============================
+ * Looks up the user in `users` table and attaches consistent req.user
  */
-const verifyFirebaseToken = async (req, res, next) => {
+exports.verifyFirebaseToken = async (req, res, next) => {
   try {
     const authHeader = req.headers.authorization || "";
-    
     if (!authHeader || !authHeader.startsWith("Bearer ")) {
       return res.status(401).json({ error: "Missing or invalid token" });
     }
 
-    const token = authHeader.split("Bearer ")[1];
-    
-    // Verify token with Firebase
+    const token = authHeader.split(" ")[1];
     const decodedToken = await admin.auth().verifyIdToken(token);
-    
-    // Attach user info from database
+
     const [users] = await db.query(
-      'SELECT user_id, email, user_role, phone FROM users WHERE firebase_uid = ?',
-      [decodedToken.uid]
+      "SELECT user_id, email, user_role, phone FROM users WHERE firebase_uid = ? OR email = ? LIMIT 1",
+      [decodedToken.uid, decodedToken.email]
     );
-    
+
     if (users.length === 0) {
       return res.status(404).json({ error: "User not found" });
     }
-    
+
     const user = users[0];
+
+    // Attach consistent structure for role-based access
     req.user = {
-      id: decodedToken.uid,
+      id: user.user_id,
       email: user.email,
       phone: user.phone,
-      role: user.user_role
+      role: user.user_role,
     };
-    
+
     next();
   } catch (error) {
-    console.error("Token verification failed:", error);
-    
-    if (error.code === 'auth/id-token-expired') {
-      return res.status(401).json({ 
-        error: 'Token expired', 
-        message: 'Please log in again' 
+    console.error("Firebase token verification failed:", error);
+
+    if (error.code === "auth/id-token-expired") {
+      return res.status(401).json({
+        error: "Token expired",
+        message: "Please log in again",
       });
     }
-    
-    return res.status(401).json({ 
-      error: 'Unauthorized', 
-      message: 'Invalid token' 
+
+    return res.status(401).json({
+      error: "Unauthorized",
+      message: "Invalid token",
     });
   }
 };
-
-module.exports = { authenticateUser, verifyFirebaseToken };

@@ -1,4 +1,5 @@
 const authService = require("./service");
+const userService = require("../users/service");
 const { db } = require("../../config/database");
 
 // ==========================
@@ -17,7 +18,13 @@ exports.signupManual = async (req, res) => {
       return res.status(409).json({ error: "Email already registered" });
 
     const userRole = role || "customer";
-    const userId = await authService.createUser(full_name, phone, email, userRole);
+    const userId = await userService.createUser(
+      full_name,
+      phone,
+      email,
+      userRole
+    );
+
     await authService.createAuthRecord(userId, email, password);
 
     res.status(201).json({ message: "User registered successfully" });
@@ -48,22 +55,29 @@ exports.loginManual = async (req, res) => {
     // Check if 2FA is enabled
     const twoFactorStatus = await authService.get2FAStatus(user.user_id);
     if (twoFactorStatus && twoFactorStatus.length > 0) {
-      const tempToken = authService.generateJwtToken({
-        user_id: user.user_id,
-        email: user.email,
-        role: user.user_role,
-        temp2FA: true,
-      }, '15m');
-      
+      const tempToken = authService.generateJwtToken(
+        {
+          user_id: user.user_id,
+          email: user.email,
+          role: user.user_role,
+          temp2FA: true,
+        },
+        "15m"
+      );
+
       const method = twoFactorStatus[0].method;
-      if (method === 'sms') {
-        const result = await authService.sendSMSCode(user.user_id, user.phone, user.full_name);
-        
+      if (method === "sms") {
+        const result = await authService.sendSMSCode(
+          user.user_id,
+          user.phone,
+          user.full_name
+        );
+
         return res.status(200).json({
           message: "2FA verification required",
           requires2FA: true,
           tempToken,
-          method: 'sms',
+          method: "sms",
         });
       }
       return res.status(200).json({
@@ -81,7 +95,16 @@ exports.loginManual = async (req, res) => {
       role: user.user_role,
     });
 
-    res.json({ message: "Login successful", token, user: { id: user.user_id, email: user.email, role: user.user_role, full_name: user.full_name } });
+    res.json({
+      message: "Login successful",
+      token,
+      user: {
+        id: user.user_id,
+        email: user.email,
+        role: user.user_role,
+        full_name: user.full_name,
+      },
+    });
   } catch (err) {
     console.error("Login error:", err);
     res.status(500).json({ error: "Server error during login" });
@@ -158,7 +181,9 @@ exports.getCurrentUser = async (req, res) => {
     if (req.firebaseUser) {
       // Firebase authentication
       const email = req.firebaseUser.email;
-      const [rows] = await db.query("SELECT * FROM users WHERE email = ?", [email]);
+      const [rows] = await db.query("SELECT * FROM users WHERE email = ?", [
+        email,
+      ]);
       return res.json({
         firebaseUser: req.firebaseUser,
         customJWT: req.customJwt,
@@ -167,10 +192,10 @@ exports.getCurrentUser = async (req, res) => {
       });
     } else if (req.user) {
       // Regular JWT authentication
-      const [rows] = await db.query("SELECT * FROM users WHERE user_id = ? OR email = ?", [
-        req.user.user_id,
-        req.user.email,
-      ]);
+      const [rows] = await db.query(
+        "SELECT * FROM users WHERE user_id = ? OR email = ?",
+        [req.user.user_id, req.user.email]
+      );
       return res.json({
         user: rows[0],
         userProfile: rows[0],
@@ -196,44 +221,50 @@ exports.enable2FA = async (req, res) => {
   try {
     const userId = req.user.user_id || req.user.id;
     const { method, phoneNumber: providedPhoneNumber } = req.body;
-    
-    if (!method || !['sms', 'email', 'authenticator'].includes(method)) {
-      return res.status(400).json({ error: 'Invalid 2FA method' });
+
+    if (!method || !["sms", "email", "authenticator"].includes(method)) {
+      return res.status(400).json({ error: "Invalid 2FA method" });
     }
-    
-    const [userRows] = await db.query('SELECT phone, email FROM users WHERE user_id = ?', [userId]);
-    if (!userRows || userRows.length === 0) {
-      return res.status(404).json({ error: 'User not found' });
-    }
-    
-    const user = userRows[0];
-    let phoneNumber = providedPhoneNumber || user.phone;
-    
-    if (providedPhoneNumber && providedPhoneNumber !== user.phone) {
-      await db.query('UPDATE users SET phone = ? WHERE user_id = ?', [providedPhoneNumber, userId]);
-      phoneNumber = providedPhoneNumber;
-    }
-    
-    phoneNumber = method === 'sms' ? phoneNumber : null;
-    const email = method === 'email' ? user.email : null;
-    
-    const [existing] = await db.query(
-      'SELECT * FROM user_2fa_settings WHERE user_id = ? AND is_enabled = true',
+
+    const [userRows] = await db.query(
+      "SELECT phone, email FROM users WHERE user_id = ?",
       [userId]
     );
-    
-    if (existing && existing.length > 0) {
-      return res.status(400).json({ error: '2FA is already enabled' });
+    if (!userRows || userRows.length === 0) {
+      return res.status(404).json({ error: "User not found" });
     }
-    
+
+    const user = userRows[0];
+    let phoneNumber = providedPhoneNumber || user.phone;
+
+    if (providedPhoneNumber && providedPhoneNumber !== user.phone) {
+      await db.query("UPDATE users SET phone = ? WHERE user_id = ?", [
+        providedPhoneNumber,
+        userId,
+      ]);
+      phoneNumber = providedPhoneNumber;
+    }
+
+    phoneNumber = method === "sms" ? phoneNumber : null;
+    const email = method === "email" ? user.email : null;
+
+    const [existing] = await db.query(
+      "SELECT * FROM user_2fa_settings WHERE user_id = ? AND is_enabled = true",
+      [userId]
+    );
+
+    if (existing && existing.length > 0) {
+      return res.status(400).json({ error: "2FA is already enabled" });
+    }
+
     await db.query(
-      'INSERT INTO user_2fa_settings (user_id, method, is_enabled, phone_number, email) VALUES (?, ?, ?, ?, ?)',
+      "INSERT INTO user_2fa_settings (user_id, method, is_enabled, phone_number, email) VALUES (?, ?, ?, ?, ?)",
       [userId, method, true, phoneNumber, email]
     );
-    
-    res.status(200).json({ message: '2FA enabled successfully' });
+
+    res.status(200).json({ message: "2FA enabled successfully" });
   } catch (error) {
-    console.error('Enable 2FA error:', error);
+    console.error("Enable 2FA error:", error);
     return res.status(500).json({ error: error.message });
   }
 };
@@ -241,15 +272,15 @@ exports.enable2FA = async (req, res) => {
 exports.disable2FA = async (req, res) => {
   try {
     const userId = req.user.user_id || req.user.id;
-    
+
     await db.query(
-      'UPDATE user_2fa_settings SET is_enabled = false WHERE user_id = ?',
+      "UPDATE user_2fa_settings SET is_enabled = false WHERE user_id = ?",
       [userId]
     );
-    
-    res.status(200).json({ message: '2FA disabled successfully' });
+
+    res.status(200).json({ message: "2FA disabled successfully" });
   } catch (error) {
-    console.error('Disable 2FA error:', error);
+    console.error("Disable 2FA error:", error);
     return res.status(500).json({ error: error.message });
   }
 };
@@ -258,10 +289,12 @@ exports.get2FAStatusController = async (req, res) => {
   try {
     const userId = req.user.user_id || req.user.id;
     const status = await authService.get2FAStatus(userId);
-    
-    res.status(200).json({ twoFactorEnabled: status && status.length > 0, methods: status });
+
+    res
+      .status(200)
+      .json({ twoFactorEnabled: status && status.length > 0, methods: status });
   } catch (error) {
-    console.error('Get 2FA status error:', error);
+    console.error("Get 2FA status error:", error);
     return res.status(500).json({ error: error.message });
   }
 };
@@ -269,33 +302,39 @@ exports.get2FAStatusController = async (req, res) => {
 exports.verify2FA = async (req, res) => {
   try {
     const { code, tempToken } = req.body;
-    
+
     if (!code || !tempToken) {
-      return res.status(400).json({ error: 'Code and temporary token are required' });
+      return res
+        .status(400)
+        .json({ error: "Code and temporary token are required" });
     }
-    
+
     // Verify the temporary token
-    const jwt = require('jsonwebtoken');
+    const jwt = require("jsonwebtoken");
     let decoded;
     try {
       decoded = jwt.verify(tempToken, process.env.JWT_SECRET);
     } catch (err) {
-      return res.status(401).json({ error: 'Invalid or expired temporary token' });
+      return res
+        .status(401)
+        .json({ error: "Invalid or expired temporary token" });
     }
-    
+
     if (!decoded.temp2FA) {
-      return res.status(400).json({ error: 'Invalid token for 2FA verification' });
+      return res
+        .status(400)
+        .json({ error: "Invalid token for 2FA verification" });
     }
-    
+
     const userId = decoded.user_id;
-    
+
     // Verify the 2FA code
     const isValid = await authService.verify2FACode(userId, code);
-    
+
     if (!isValid) {
-      return res.status(401).json({ error: 'Invalid verification code' });
+      return res.status(401).json({ error: "Invalid verification code" });
     }
-    
+
     // Generate final token
     await authService.updateLoginStats(userId);
     const finalToken = authService.generateJwtToken({
@@ -303,17 +342,20 @@ exports.verify2FA = async (req, res) => {
       email: decoded.email,
       role: decoded.role,
     });
-    
+
     // Get user details
-    const [rows] = await db.query('SELECT user_id, email, user_role, full_name FROM users WHERE user_id = ?', [userId]);
-    
+    const [rows] = await db.query(
+      "SELECT user_id, email, user_role, full_name FROM users WHERE user_id = ?",
+      [userId]
+    );
+
     res.status(200).json({
-      message: '2FA verification successful',
+      message: "2FA verification successful",
       token: finalToken,
-      user: rows[0]
+      user: rows[0],
     });
   } catch (error) {
-    console.error('Verify 2FA error:', error);
+    console.error("Verify 2FA error:", error);
     return res.status(500).json({ error: error.message });
   }
 };

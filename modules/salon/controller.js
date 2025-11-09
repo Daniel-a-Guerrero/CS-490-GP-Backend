@@ -119,3 +119,24 @@ exports.editStaff=async (req,res)=>{
     catch(err){console.error("Edit staff error:", err);
     res.status(500).json({ err: "Server error editing staff" });}
 }
+exports.salonReven=async (req,res)=>{
+    try{
+        const {s_id}=req.params;
+        const sal_id=Number(s_id)
+        if(!sal_id) return res.status(400).json({error: "Invalid salon ID"});
+        const salonInfo=await salonService.salonRev(sal_id)
+        return res.status(200).json({salonInfo})
+    }
+    catch(err){console.error("Edit staff error:", err);
+    res.status(500).json({ err: "Server error getting amount" });}
+}
+exports.salonAppointments=async(req,res)=>{
+    try{
+        const {s_id}=req.params;
+        const sal_id=Number(s_id)
+        if(!sal_id) return res.status(400).json({error: "Invalid salon ID"});
+        const salonInfo=await salonService.salonApp(sal_id)
+        return res.status(200).json({salonInfo})
+    }
+    catch(err){console.error("Edit staff error:", err);
+    res.status(500).json({ err: "Server error getting amount" });}}

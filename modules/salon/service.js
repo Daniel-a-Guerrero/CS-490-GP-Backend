@@ -63,6 +63,90 @@ async function verSalon(s_id){
   SET s.status='active'
   WHERE salon_id=?`
   const result=await db.query(query, [s_id])
+  return result
 }
-
-module.exports = { createSalon, allSalons, freeSalons, dailySched, staffFiltered, verSalon };
+async function salonApp(s_id){
+  const query=`SELECT
+    COUNT(CASE WHEN a.scheduled_time >= DATE_SUB(DATE_FORMAT(CURRENT_DATE(), '%Y-%m-01'), INTERVAL 1 MONTH) AND a.scheduled_time < DATE_FORMAT(CURRENT_DATE(), '%Y-%m-01') THEN 1 END) AS previous_month_count,
+    COUNT(CASE WHEN a.scheduled_time >= DATE_FORMAT(CURRENT_DATE(), '%Y-%m-01') THEN 1 END) AS current_month_count
+FROM appointments AS a
+WHERE a.salon_id = ?
+AND a.scheduled_time >= DATE_SUB(DATE_FORMAT(CURRENT_DATE(), '%Y-%m-01'), INTERVAL 1 MONTH);`
+  const result=await db.query(query, [s_id])
+  const { previous_month_count, current_month_count} = result;
+  const percentChange=previous_month_count===0?100:
+    (((current_month_count-previous_month_count)/previous_month_count)*100)
+  return {current_month_count, previous_month_count, percentChange}  
+}
+async function salonRev(s_id) {
+  const query=`SELECT
+    SUM(
+        CASE 
+            WHEN MONTH(p.created_at) = MONTH(CURRENT_DATE()) 
+                 AND YEAR(p.created_at) = YEAR(CURRENT_DATE()) 
+            THEN amount 
+            ELSE 0 
+        END
+    ) AS current_month_revenue,
+    SUM(
+        CASE 
+            WHEN MONTH(p.created_at) = MONTH(CURRENT_DATE() - INTERVAL 1 MONTH) 
+                 AND YEAR(p.created_at) = YEAR(CURRENT_DATE() - INTERVAL 1 MONTH) 
+            THEN amount 
+            ELSE 0 
+        END
+    ) AS last_month_revenue
+FROM
+    payments p
+join appointments a on p.appointment_id=a.appointment_id
+join salons s on s.salon_id=a.salon_id
+where s.salon_id=?;`
+  const [result]=await db.query(query, [s_id])
+  const { current_month_revenue, last_month_revenue } = result;
+  const percentChange=last_month_revenue===0?100:
+    (((current_month_revenue-last_month_revenue)/last_month_revenue)*100)
+  return {current_month_revenue, last_month_revenue, percentChange}  
+}
+async function newCust(s_id){
+  const query=`SELECT
+    COUNT(DISTINCT CASE WHEN u.created_at >= DATE_SUB(DATE_FORMAT(CURRENT_DATE(), '%Y-%m-01'), INTERVAL 1 MONTH)
+               AND u.created_at < DATE_FORMAT(CURRENT_DATE(), '%Y-%m-01') THEN u.user_id END) AS previous_month_count,
+    COUNT(DISTINCT CASE WHEN u.created_at >= DATE_FORMAT(CURRENT_DATE(), '%Y-%m-01') THEN u.user_id END) AS current_month_count
+FROM
+    users AS u
+JOIN
+    appointments a ON u.user_id = a.user_id
+WHERE
+    a.salon_id = ?
+    AND u.created_at >= DATE_SUB(DATE_FORMAT(CURRENT_DATE(), '%Y-%m-01'), INTERVAL 1 MONTH);
+`
+  const result=await db.query(query, [s_id])
+  const { previous_month_count, current_month_count} = result;
+  const percentChange=previous_month_count===0?100:
+    (((current_month_count-previous_month_count)/previous_month_count)*100)
+  return {current_month_count, previous_month_count, percentChange}  
+}
+async function avgRating(s_id){
+  const query=`SELECT AVG(CASE WHEN a.created_at >= DATE_SUB(DATE_FORMAT(CURRENT_DATE(), '%Y-%m-01'), INTERVAL 1 MONTH) AND a.created_at < DATE_FORMAT(CURRENT_DATE(), '%Y-%m-01') THEN a.rating END) AS previous_month_avg,
+    AVG(CASE WHEN a.created_at >= DATE_FORMAT(CURRENT_DATE(), '%Y-%m-01') THEN a.rating END) AS current_month_avg
+FROM reviews AS a WHERE a.salon_id = ?
+AND a.created_at >= DATE_SUB(DATE_FORMAT(CURRENT_DATE(), '%Y-%m-01'), INTERVAL 1 MONTH);`
+  const result=await db.query(query, [s_id])
+  const { previous_month_avg, current_month_avg} = result;
+  const percentChange=previous_month_avg===0?100:
+    (((current_month_avg-previous_month_avg)/previous_month_avg)*100)
+  return {current_month_avg, previous_month_avg, percentChange}  
+}
+async function apptToday(s_id){
+  const query=`select a.* 
+from appointments a
+where DATE(a.scheduled_time)=CURDATE()
+and a.salon_id=?`
+  const result=await db.query(query, [s_id])
+  const { previous_month_avg, current_month_avg} = result;
+  const percentChange=previous_month_avg===0?100:
+    (((current_month_avg-previous_month_avg)/previous_month_avg)*100)
+  return {current_month_avg, previous_month_avg, percentChange}  
+}
+module.exports = { createSalon, allSalons, freeSalons,
+   dailySched, staffFiltered, verSalon, salonRev,salonApp };

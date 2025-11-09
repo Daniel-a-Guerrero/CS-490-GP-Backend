@@ -14,4 +14,6 @@ router.post('/newSalon',(req, res)=>{console.log(`In progress`)})
 
 //Maybe move elsewhere, only for admin
 router.put('/salon/:sID', verifyFirebaseToken, salonController.verifySalon)
+router.get('/rStats/:s_id', verifyFirebaseToken, salonController.salonReven)
+router.get('/aStats/:s_id', verifyFirebaseToken, salonController.salonAppointments)
 module.exports=router;

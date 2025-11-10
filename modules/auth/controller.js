@@ -1,4 +1,5 @@
 const authService = require("./service");
+const userService = require("../users/service");
 const { db } = require("../../config/database");
 
 // Signup function
@@ -17,7 +18,7 @@ exports.signupManual = async (req, res) => {
       return res.status(409).json({ error: "Email already registered" });
 
     const userRole = role || "customer";
-    const userId = await authService.createUser(full_name, phone, email, userRole);
+    const userId = await userService.createUser(full_name, phone, email, userRole);
     await authService.createAuthRecord(userId, email, password);
 
     res.status(201).json({ message: "User registered" });
@@ -88,6 +89,15 @@ exports.loginManual = async (req, res) => {
       user_id: user.user_id,
       email: user.email,
       role: user.user_role,
+    });
+
+    // Set secure HTTP-only cookie for middleware + persistence
+    res.cookie("token", token, {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === "production",
+      sameSite: "lax",
+      maxAge: 60 * 60 * 1000, // 1 hour
+      path: "/",
     });
 
     res.json({ message: "Login successful", token, user: { id: user.user_id, email: user.email, role: user.user_role, full_name: user.full_name } });

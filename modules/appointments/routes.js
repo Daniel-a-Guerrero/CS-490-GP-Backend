@@ -4,9 +4,9 @@ const appointmentController = require("./controller");
 const { verifyAnyToken } = require("../../middleware/verifyAnyTokens");
 const checkRoles = require("../../middleware/checkRoles");
 
-// Create new appointment
+// ✅ Create new appointment (supports auto-assign staff)
 router.post(
-  "/",
+  "/create",
   verifyAnyToken,
   checkRoles("customer", "staff", "owner"),
   appointmentController.createAppointment
@@ -19,7 +19,6 @@ router.get(
   appointmentController.getAppointmentsBySalon
 );
 
-// Get all appointments for logged-in user
 router.get(
   "/",
   verifyAnyToken,
@@ -27,7 +26,6 @@ router.get(
   appointmentController.getUserAppointments
 );
 
-// Get appointment by ID
 router.get(
   "/:id",
   verifyAnyToken,
@@ -35,7 +33,6 @@ router.get(
   appointmentController.getAppointmentById
 );
 
-// Update appointment
 router.put(
   "/:id",
   verifyAnyToken,
@@ -43,7 +40,6 @@ router.put(
   appointmentController.updateAppointment
 );
 
-// Cancel appointment
 router.delete(
   "/:id",
   verifyAnyToken,

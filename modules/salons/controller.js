@@ -33,30 +33,49 @@ exports.getStaffBySalonId = async (req, res) => {
   }
 };
 
-// ✅ Added route handler for salon services
+// Fixed and improved getSalonServices
 exports.getSalonServices = async (req, res) => {
   try {
     const { salon_id } = req.params;
-    if (!salon_id) return res.status(400).json({ error: "Salon ID required" });
+    if (!salon_id) {
+      return res.status(400).json({ error: "Salon ID required" });
+    }
 
-    const [services] = await query(
-      `SELECT s.service_id, s.custom_name AS name, s.price, s.duration, s.description, c.name AS category
-             FROM services s
-             JOIN service_categories c ON s.category_id = c.category_id
-             WHERE s.salon_id = ? AND s.is_active = 1
-             ORDER BY s.custom_name ASC`,
+    const services = await query(
+      `
+      SELECT 
+        s.service_id,
+        s.custom_name,
+        s.price,
+        s.duration,
+        s.description,
+        c.name AS category_name,
+        m.name AS main_category
+      FROM services s
+      JOIN service_categories c ON s.category_id = c.category_id
+      JOIN main_categories m ON c.main_category_id = m.main_category_id
+      WHERE s.salon_id = ? AND s.is_active = 1
+      ORDER BY m.name, c.name, s.custom_name;
+      `,
       [salon_id]
     );
 
-    if (!services.length)
-      return res
-        .status(404)
-        .json({ message: "No services found for this salon" });
+    console.log(
+      "DEBUG: Found services:",
+      services.length,
+      "for salon_id:",
+      salon_id
+    );
 
-    res.status(200).json(services);
+    //  Return empty array instead of 404 to prevent front-end error
+    if (!services || services.length === 0) {
+      return res.status(200).json([]);
+    }
+
+    return res.status(200).json(services);
   } catch (error) {
-    console.error("getSalonServices error:", error);
-    res.status(500).json({ error: "Failed to fetch salon services" });
+    console.error(" getSalonServices error:", error);
+    return res.status(500).json({ error: "Failed to fetch salon services" });
   }
 };
 
@@ -90,7 +109,7 @@ exports.getUserVisitHistory = async (req, res) => {
   if (!req.user) {
     return res.status(401).json({ error: "Unauthorized" });
   }
-  const userId = req.user.uid; // Assuming the Firebase UID matches the customer ID
+  const userId = req.user.uid;
   try {
     const history = await query(
       `select h.*
@@ -121,4 +140,3 @@ exports.getCustomerVisitHistory = async (req, res) => {
     res.status(500).json({ error: "Failed to fetch customer visit history" });
   }
 };
- 

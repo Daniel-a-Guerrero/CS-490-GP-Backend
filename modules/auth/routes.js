@@ -125,7 +125,7 @@ router.post("/set-role", async (req, res) => {
 // Middleware that handles both JWT and Firebase authentication
 const flexibleAuth = async (req, res, next) => {
   const authHeader = req.headers.authorization || "";
-  
+
   if (!authHeader || !authHeader.startsWith("Bearer ")) {
     return res.status(401).json({ error: "Missing or invalid token" });
   }
@@ -150,9 +150,9 @@ const flexibleAuth = async (req, res, next) => {
       return next();
     } catch (jwtErr) {
       console.error("Authentication failed:", jwtErr);
-      return res.status(401).json({ 
+      return res.status(401).json({
         error: "Invalid or expired token",
-        message: "Authentication failed" 
+        message: "Authentication failed",
       });
     }
   }
@@ -169,6 +169,18 @@ router.get("/2fa/status", flexibleAuth, authController.get2FAStatusController);
 router.post("/2fa/enable", flexibleAuth, authController.enable2FA);
 router.post("/2fa/disable", flexibleAuth, authController.disable2FA);
 router.post("/verify-2fa", authController.verify2FA);
+router.post("/refresh", authController.refreshToken);
+
+// Temporary debug route to verify token decoding and salon binding
+const { verifyAnyToken } = require("../../middleware/verifyAnyTokens");
+
+router.get("/me-test", verifyAnyToken, (req, res) => {
+  console.log("req.user =", req.user);
+  res.json({
+    message: "verifyAnyToken middleware is working!",
+    user: req.user,
+  });
+});
 
 // Account management
 router.delete("/delete-account", flexibleAuth, authController.deleteAccount);

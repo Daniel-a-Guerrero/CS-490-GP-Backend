@@ -1,32 +1,92 @@
 const { db } = require("../../config/database");
 
 /**
- * Create a new appointment
+ * Helper: insert or update appointment_services rows
+ */
+async function addAppointmentServices(appointmentId, services) {
+  if (!Array.isArray(services) || services.length === 0) return;
+
+  const sql = `
+    INSERT INTO appointment_services (appointment_id, service_id, duration, price)
+    VALUES ?
+    ON DUPLICATE KEY UPDATE
+      duration = VALUES(duration),
+      price = VALUES(price)
+  `;
+
+  const values = services.map((s) => [
+    appointmentId,
+    s.service_id,
+    s.duration,
+    s.price,
+  ]);
+
+  await db.query(sql, [values]);
+}
+
+/**
+ *  Helper: fetch all services attached to an appointment
+ */
+async function getAppointmentServices(appointmentId) {
+  const sql = `
+    SELECT asv.service_id, sv.custom_name, asv.duration, asv.price
+    FROM appointment_services asv
+    JOIN services sv ON asv.service_id = sv.service_id
+    WHERE asv.appointment_id = ?
+  `;
+  const [rows] = await db.query(sql, [appointmentId]);
+  return rows;
+}
+
+/**
+ * Create a new appointment (supports single or multiple services)
  */
 async function createAppointment(
   userId,
   salonId,
   staffId,
-  serviceId,
+  serviceInput,
   scheduledTime,
   price,
   notes
 ) {
   const sql = `
     INSERT INTO appointments 
-      (user_id, salon_id, staff_id, service_id, scheduled_time, price, notes, status)
-    VALUES (?, ?, ?, ?, ?, ?, ?, 'booked')
+      (user_id, salon_id, staff_id, scheduled_time, price, notes, status)
+    VALUES (?, ?, ?, ?, ?, ?, 'booked')
   `;
   const [result] = await db.query(sql, [
     userId,
     salonId,
     staffId || null,
-    serviceId,
     scheduledTime,
     price,
     notes,
   ]);
-  return result.insertId;
+
+  const appointmentId = result.insertId;
+
+  // Handle multiple services if array passed
+  if (Array.isArray(serviceInput)) {
+    await addAppointmentServices(appointmentId, serviceInput);
+  } else if (serviceInput) {
+    // single service fallback
+    const [svc] = await db.query(
+      "SELECT duration, price FROM services WHERE service_id = ?",
+      [serviceInput]
+    );
+    if (svc.length) {
+      await addAppointmentServices(appointmentId, [
+        {
+          service_id: serviceInput,
+          duration: svc[0].duration,
+          price: svc[0].price,
+        },
+      ]);
+    }
+  }
+
+  return appointmentId;
 }
 
 /**
@@ -39,16 +99,18 @@ async function getAppointmentsByUser(userId) {
       a.scheduled_time,
       a.status,
       a.price,
-      s.name AS salon_name,
-      sv.custom_name AS service_name,
+      s.salon_name AS salon_name,
+      GROUP_CONCAT(sv.custom_name SEPARATOR ', ') AS service_names,
       stf.staff_id,
       su.full_name AS staff_name
     FROM appointments a
     LEFT JOIN salons s ON a.salon_id = s.salon_id
-    LEFT JOIN services sv ON a.service_id = sv.service_id
+    LEFT JOIN appointment_services aps ON a.appointment_id = aps.appointment_id
+    LEFT JOIN services sv ON aps.service_id = sv.service_id
     LEFT JOIN staff stf ON a.staff_id = stf.staff_id
     LEFT JOIN users su ON stf.user_id = su.user_id
     WHERE a.user_id = ?
+    GROUP BY a.appointment_id
     ORDER BY a.scheduled_time DESC
   `;
   const [rows] = await db.query(sql, [userId]);
@@ -65,69 +127,80 @@ async function getAppointmentById(appointmentId) {
       a.user_id,
       a.salon_id,
       a.staff_id,
-      a.service_id,
       a.scheduled_time,
       a.status,
       a.price,
       a.notes,
-      s.salon_name AS salon_name, 
-      sv.custom_name AS service_name,
+      s.salon_name AS salon_name,
       cu.full_name AS customer_name,
       stf.staff_id,
       su.full_name AS staff_name
     FROM appointments a
     LEFT JOIN salons s ON a.salon_id = s.salon_id
-    LEFT JOIN services sv ON a.service_id = sv.service_id
     LEFT JOIN users cu ON cu.user_id = a.user_id
     LEFT JOIN staff stf ON a.staff_id = stf.staff_id
     LEFT JOIN users su ON stf.user_id = su.user_id
     WHERE a.appointment_id = ?
   `;
   const [rows] = await db.query(sql, [appointmentId]);
-  return rows.length > 0 ? rows[0] : null;
+  if (!rows.length) return null;
+
+  const appointment = rows[0];
+  appointment.services = await getAppointmentServices(appointmentId);
+  return appointment;
 }
 
 /**
- * Update appointment
+ * Update appointment (supports multiple services)
  */
 async function updateAppointment(appointmentId, updates) {
-  const fields = [];
-  const values = [];
+  const [rows] = await db.query(
+    `SELECT staff_id, scheduled_time, price, notes, status 
+     FROM appointments WHERE appointment_id = ?`,
+    [appointmentId]
+  );
+  if (!rows.length) return 0;
+  const current = rows[0];
 
-  if (updates.staffId) {
-    fields.push("staff_id = ?");
-    values.push(updates.staffId);
-  }
-  if (updates.serviceId) {
-    fields.push("service_id = ?");
-    values.push(updates.serviceId);
-  }
-  if (updates.scheduledTime) {
-    fields.push("scheduled_time = ?");
-    values.push(updates.scheduledTime);
-  }
-  if (updates.price !== undefined) {
-    fields.push("price = ?");
-    values.push(updates.price);
-  }
-  if (updates.notes) {
-    fields.push("notes = ?");
-    values.push(updates.notes);
-  }
-  if (updates.status) {
-    fields.push("status = ?");
-    values.push(updates.status);
+  const final = {
+    staff_id: updates.hasOwnProperty("staff_id")
+      ? updates.staff_id
+      : current.staff_id,
+    scheduled_time: updates.hasOwnProperty("scheduled_time")
+      ? updates.scheduled_time
+      : current.scheduled_time,
+    price: updates.hasOwnProperty("price") ? updates.price : current.price,
+    notes: updates.hasOwnProperty("notes") ? updates.notes : current.notes,
+    status: updates.hasOwnProperty("status") ? updates.status : current.status,
+  };
+
+  const sql = `
+    UPDATE appointments
+    SET staff_id = ?, scheduled_time = ?, price = ?, notes = ?, status = ?, updated_at = CURRENT_TIMESTAMP
+    WHERE appointment_id = ?
+  `;
+  const [result] = await db.query(sql, [
+    final.staff_id,
+    final.scheduled_time,
+    final.price,
+    final.notes,
+    final.status,
+    appointmentId,
+  ]);
+
+  if (result.affectedRows === 0) return 0;
+
+  // Handle multiple services if provided
+  if (Array.isArray(updates.services)) {
+    await db.query(
+      "DELETE FROM appointment_services WHERE appointment_id = ?",
+      [appointmentId]
+    );
+    await addAppointmentServices(appointmentId, updates.services);
   }
 
-  if (fields.length === 0) return 0;
-
-  const sql = `UPDATE appointments SET ${fields.join(
-    ", "
-  )} WHERE appointment_id = ?`;
-  values.push(appointmentId);
-
-  const [result] = await db.query(sql, values);
-  return result.affectedRows;
+  const updated = await getAppointmentById(appointmentId);
+  return updated;
 }
 
 /**
@@ -144,8 +217,7 @@ async function cancelAppointment(appointmentId) {
 }
 
 /**
- * Get all appointments for a salon (owner/staff/admin)
- * Supports ?date=YYYY-MM-DD or ?from=YYYY-MM-DD&to=YYYY-MM-DD
+ * Get all appointments for a salon
  */
 async function getAppointmentsBySalon(
   salonId,
@@ -162,12 +234,13 @@ async function getAppointmentsBySalon(
       a.notes,
       cu.full_name AS customer_name,
       cu.profile_pic AS customer_avatar,
-      sv.custom_name AS service_name,
+      GROUP_CONCAT(sv.custom_name SEPARATOR ', ') AS service_names,
       stf.staff_id,
       su.full_name AS staff_name
     FROM appointments a
     LEFT JOIN users cu ON a.user_id = cu.user_id
-    LEFT JOIN services sv ON a.service_id = sv.service_id
+    LEFT JOIN appointment_services aps ON a.appointment_id = aps.appointment_id
+    LEFT JOIN services sv ON aps.service_id = sv.service_id
     LEFT JOIN staff stf ON a.staff_id = stf.staff_id
     LEFT JOIN users su ON stf.user_id = su.user_id
     WHERE a.salon_id = ?
@@ -175,24 +248,17 @@ async function getAppointmentsBySalon(
 
   const params = [salonId];
 
-  // Use full-day range for single date (avoids timezone mismatch)
   if (date) {
-    const startOfDay = `${date} 00:00:00`;
-    const endOfDay = `${date} 23:59:59`;
     sql += " AND a.scheduled_time BETWEEN ? AND ?";
-    params.push(startOfDay, endOfDay);
-  }
-  // If a range is provided, handle it the same way
-  else if (from && to) {
+    params.push(`${date} 00:00:00`, `${date} 23:59:59`);
+  } else if (from && to) {
     sql += " AND a.scheduled_time BETWEEN ? AND ?";
     params.push(`${from} 00:00:00`, `${to} 23:59:59`);
   }
 
-  sql += " ORDER BY a.scheduled_time ASC";
+  sql += " GROUP BY a.appointment_id ORDER BY a.scheduled_time ASC";
 
   const [rows] = await db.query(sql, params);
-
-  // Always return an array (never undefined)
   return rows || [];
 }
 
@@ -203,4 +269,6 @@ module.exports = {
   getAppointmentsBySalon,
   updateAppointment,
   cancelAppointment,
+  addAppointmentServices,
+  getAppointmentServices,
 };

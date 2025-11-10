@@ -371,3 +371,38 @@ exports.deleteAccount = async (req, res) => {
     res.status(500).json({ error: "Failed to delete account" });
   }
 };
+
+// ==========================
+// REFRESH TOKEN
+// ==========================
+exports.refreshToken = async (req, res) => {
+  const oldToken = req.cookies?.token;
+  if (!oldToken) return res.status(401).json({ error: "Missing token" });
+
+  try {
+    const jwt = require("jsonwebtoken");
+    const decoded = jwt.verify(oldToken, process.env.JWT_SECRET, {
+      ignoreExpiration: true,
+    });
+    const newToken = jwt.sign(
+      {
+        user_id: decoded.user_id,
+        email: decoded.email,
+        role: decoded.role,
+      },
+      process.env.JWT_SECRET,
+      { expiresIn: "1h" }
+    );
+
+    res.cookie("token", newToken, {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === "production",
+      sameSite: "lax",
+      maxAge: 3600 * 1000, // 1 hour
+    });
+
+    return res.json({ message: "Token refreshed", token: newToken });
+  } catch (err) {
+    return res.status(401).json({ error: "Invalid or expired token" });
+  }
+};

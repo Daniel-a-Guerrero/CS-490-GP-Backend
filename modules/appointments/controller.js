@@ -1,74 +1,175 @@
-const { query } = require("../../config/database");
-const { db } = require("../../config/database");
+const { query, db } = require("../../config/database");
 const appointmentService = require("./service");
+const { sendEmail } = require("../../services/email");
 
 /**
  * Create Appointment
  * - Customers can book for themselves
  * - Staff/Owners can book on behalf of customers
+ * - If no staffId provided, auto-assign the least busy available staff
  */
+
 exports.createAppointment = async (req, res) => {
   try {
     const {
       salonId,
       staffId,
       serviceId,
+      services,
       scheduledTime,
       price,
       notes,
-      customerEmail,
-      customerPhone,
-      customerName,
+      firstName,
+      lastName,
+      email,
+      phone,
+      address,
+      city,
+      state,
+      zip,
     } = req.body;
 
-    let userId = req.user.user_id;
     const role = req.user.role;
     const tokenSalonId = req.user.salon_id;
-
-    // Prefer salonId from token if not provided in body
     const finalSalonId = salonId || tokenSalonId;
 
-    if (!finalSalonId || !serviceId || !scheduledTime) {
-      return res.status(400).json({ error: "Missing required fields" });
+    // alidate either serviceId or services array
+    if (
+      !finalSalonId ||
+      (!serviceId && !Array.isArray(services)) ||
+      !scheduledTime ||
+      !email ||
+      !phone
+    ) {
+      return res.status(400).json({
+        error: "Missing required fields (email, phone, service, time)",
+      });
     }
 
-    // ✅ FIXED: Staff/Owner booking for another customer
-    if (role === "staff" || role === "owner") {
-      const existing = await query(
-        "SELECT user_id FROM users WHERE email = ? OR phone = ? LIMIT 1",
-        [customerEmail, customerPhone]
+    const [existingCustomer] = await db.query(
+      "SELECT user_id, full_name FROM users WHERE email = ? OR phone = ? LIMIT 1",
+      [email, phone]
+    );
+
+    let userId;
+    let customerFullName;
+
+    if (existingCustomer.length) {
+      userId = existingCustomer[0].user_id;
+      customerFullName = existingCustomer[0].full_name;
+    } else {
+      const fullName =
+        `${firstName || ""} ${lastName || ""}`.trim() || "New Customer";
+      const [insert] = await db.query(
+        "INSERT INTO users (full_name, phone, email, user_role) VALUES (?, ?, ?, 'customer')",
+        [fullName, phone, email]
+      );
+      userId = insert.insertId;
+      customerFullName = fullName;
+    }
+
+    await db.query(
+      `
+      INSERT INTO salon_customers (salon_id, user_id, address, city, state, zip, notes)
+      VALUES (?, ?, ?, ?, ?, ?, ?)
+      ON DUPLICATE KEY UPDATE
+        address = VALUES(address),
+        city = VALUES(city),
+        state = VALUES(state),
+        zip = VALUES(zip),
+        notes = VALUES(notes)
+      `,
+      [
+        finalSalonId,
+        userId,
+        address || null,
+        city || null,
+        state || null,
+        zip || null,
+        notes || null,
+      ]
+    );
+
+    let assignedStaffId = staffId;
+    if (!assignedStaffId) {
+      const [rows] = await db.query(
+        `
+        SELECT s.staff_id
+        FROM staff s
+        LEFT JOIN appointments a 
+          ON s.staff_id = a.staff_id 
+          AND DATE(a.scheduled_time) = CURDATE()
+        WHERE s.salon_id = ? AND s.is_active = 1
+        GROUP BY s.staff_id
+        ORDER BY COUNT(a.appointment_id) ASC
+        LIMIT 1;
+        `,
+        [finalSalonId]
       );
 
-      if (existing.length) {
-        userId = existing[0].user_id;
-      } else {
-        const result = await query(
-          "INSERT INTO users (full_name, phone, email, user_role) VALUES (?, ?, ?, 'customer')",
-          [customerName || "New Customer", customerPhone, customerEmail]
-        );
-        userId = result.insertId;
+      if (!rows.length) {
+        return res
+          .status(400)
+          .json({ error: "No active staff available for this salon" });
       }
+
+      assignedStaffId = rows[0].staff_id;
     }
+
+    // handle multi or single service gracefully
+    const serviceInput =
+      Array.isArray(services) && services.length ? services : serviceId;
 
     const appointmentId = await appointmentService.createAppointment(
       userId,
       finalSalonId,
-      staffId,
-      serviceId,
+      assignedStaffId,
+      serviceInput,
       scheduledTime,
       price || 0,
       notes
     );
 
-    // Link customer to salon if not already linked
-    await query(
-      "INSERT IGNORE INTO salon_customers (salon_id, user_id) VALUES (?, ?)",
-      [finalSalonId, userId]
+    const [[salonInfo]] = await db.query(
+      "SELECT salon_name, address FROM salons WHERE salon_id = ?",
+      [finalSalonId]
     );
+
+    // Pick service names from either array or single
+    let serviceSummary = "";
+    if (Array.isArray(services)) {
+      serviceSummary = services
+        .map((s) => s.custom_name || `#${s.service_id}`)
+        .join(", ");
+    } else {
+      const [[serviceInfo]] = await db.query(
+        "SELECT custom_name, duration FROM services WHERE service_id = ?",
+        [serviceId]
+      );
+      serviceSummary = serviceInfo?.custom_name || "Selected Service";
+    }
+
+    const emailHtml = `
+      <h2>Appointment Confirmed</h2>
+      <p>Dear ${firstName || customerFullName || "Customer"},</p>
+      <p>Your appointment at <b>${
+        salonInfo?.salon_name || "our salon"
+      }</b> is confirmed.</p>
+      <ul>
+        <li><b>Services:</b> ${serviceSummary}</li>
+        <li><b>Time:</b> ${new Date(scheduledTime).toLocaleString()}</li>
+        <li><b>Total Price:</b> $${Number(price).toFixed(2)}</li>
+      </ul>
+      <p><b>Salon Address:</b> ${salonInfo?.address || "N/A"}</p>
+      <p>We look forward to seeing you!</p>
+    `;
+
+    await sendEmail(email, "Your Appointment is Confirmed!", emailHtml);
 
     res.status(201).json({
       message: "Appointment created successfully",
       appointmentId,
+      assignedStaffId,
     });
   } catch (error) {
     console.error("Error creating appointment:", error);
@@ -76,9 +177,6 @@ exports.createAppointment = async (req, res) => {
   }
 };
 
-/**
- * Get appointments for the logged-in user
- */
 exports.getUserAppointments = async (req, res) => {
   try {
     const userId = req.user.user_id;
@@ -90,28 +188,17 @@ exports.getUserAppointments = async (req, res) => {
   }
 };
 
-/**
- * Get appointment by ID
- */
 exports.getAppointmentById = async (req, res) => {
   try {
     const { id } = req.params;
     const role = req.user.role;
     const appointment = await appointmentService.getAppointmentById(id);
-
-    if (!appointment) {
+    if (!appointment)
       return res.status(404).json({ error: "Appointment not found" });
-    }
-
-    // Role-based access control
-    if (role === "staff" && appointment.salon_id !== req.user.salon_id) {
+    if (role === "staff" && appointment.salon_id !== req.user.salon_id)
       return res.status(403).json({ error: "Forbidden: cross-salon access" });
-    }
-
-    if (role === "customer" && appointment.user_id !== req.user.user_id) {
+    if (role === "customer" && appointment.user_id !== req.user.user_id)
       return res.status(403).json({ error: "Access denied" });
-    }
-
     res.json(appointment);
   } catch (error) {
     console.error("Error fetching appointment:", error);
@@ -119,9 +206,6 @@ exports.getAppointmentById = async (req, res) => {
   }
 };
 
-/**
- * Update Appointment
- */
 exports.updateAppointment = async (req, res) => {
   try {
     const { id } = req.params;
@@ -129,57 +213,40 @@ exports.updateAppointment = async (req, res) => {
     const updates = req.body;
 
     const appointment = await appointmentService.getAppointmentById(id);
-    if (!appointment) {
+    if (!appointment)
       return res.status(404).json({ error: "Appointment not found" });
-    }
-
-    if (role === "staff" && appointment.salon_id !== req.user.salon_id) {
+    if (role === "staff" && appointment.salon_id !== req.user.salon_id)
       return res.status(403).json({ error: "Forbidden: cross-salon access" });
-    }
 
-    const affectedRows = await appointmentService.updateAppointment(
-      id,
-      updates
-    );
-    if (affectedRows === 0) {
-      return res.status(404).json({ error: "Appointment not found" });
-    }
+    const updated = await appointmentService.updateAppointment(id, updates);
+    if (!updated)
+      return res
+        .status(404)
+        .json({ error: "Appointment not found or unchanged" });
 
-    res.json({ message: "Appointment updated successfully" });
+    res.json({ message: "Appointment updated successfully", updated });
   } catch (error) {
     console.error("Error updating appointment:", error);
     res.status(500).json({ error: "Failed to update appointment" });
   }
 };
 
-/**
- * Cancel Appointment
- */
 exports.cancelAppointment = async (req, res) => {
   try {
     const { id } = req.params;
     const role = req.user.role;
-
     const appointment = await appointmentService.getAppointmentById(id);
-    if (!appointment) {
+    if (!appointment)
       return res.status(404).json({ error: "Appointment not found" });
-    }
-
-    if (role === "staff" && appointment.salon_id !== req.user.salon_id) {
+    if (role === "staff" && appointment.salon_id !== req.user.salon_id)
       return res.status(403).json({ error: "Forbidden: cross-salon access" });
-    }
-
-    if (role === "customer" && appointment.user_id !== req.user.user_id) {
+    if (role === "customer" && appointment.user_id !== req.user.user_id)
       return res
         .status(403)
         .json({ error: "You can only cancel your own appointments" });
-    }
-
     const affectedRows = await appointmentService.cancelAppointment(id);
-    if (affectedRows === 0) {
+    if (affectedRows === 0)
       return res.status(404).json({ error: "Appointment not found" });
-    }
-
     res.json({ message: "Appointment cancelled successfully" });
   } catch (error) {
     console.error("Error cancelling appointment:", error);
@@ -187,57 +254,30 @@ exports.cancelAppointment = async (req, res) => {
   }
 };
 
-/**
- * Get appointments by salon (Owner/Admin/Staff)
- * Automatically uses req.user.salon_id for owner/staff.
- * Admins can use ?salon_id= or /:salon_id.
- * Supports optional filters:
- *  - ?date=YYYY-MM-DD
- *  - ?from=YYYY-MM-DD&to=YYYY-MM-DD
- */
 exports.getAppointmentsBySalon = async (req, res) => {
   try {
     const role = req.user.role;
     const tokenSalonId = req.user.salon_id;
-
     const salonId =
       role === "admin"
         ? req.params.salon_id || req.query.salon_id || tokenSalonId
         : tokenSalonId;
-
-    if (!salonId) {
+    if (!salonId)
       return res
         .status(400)
         .json({ error: "Salon ID missing or not associated with this user" });
-    }
-
-    if (role === "staff" && tokenSalonId !== Number(salonId)) {
+    if (role === "staff" && tokenSalonId !== Number(salonId))
       return res.status(403).json({ error: "Forbidden: cross-salon access" });
-    }
-
     const { date, from, to } = req.query;
-
     const appointments = await appointmentService.getAppointmentsBySalon(
       salonId,
       date,
       from,
       to
     );
-
-    console.log("DEBUG:", { salonId, date, count: appointments.length });
-
-    if (!appointments || appointments.length === 0) {
-      console.log(
-        `No appointments found for salon_id=${salonId} on date=${date}`
-      );
-      return res.status(200).json({ data: [] });
-    }
-
-    return res.status(200).json({ data: appointments });
+    res.status(200).json({ data: appointments });
   } catch (error) {
     console.error("Error fetching salon appointments:", error);
-    return res
-      .status(500)
-      .json({ error: "Failed to fetch salon appointments" });
+    res.status(500).json({ error: "Failed to fetch salon appointments" });
   }
 };

@@ -32,7 +32,6 @@ exports.verifyAnyToken = async (req, res, next) => {
     try {
       const decoded = jwt.verify(token, process.env.JWT_SECRET);
 
-      // Fetch salon_id dynamically from DB (for owners/staff)
       const [rows] = await db.query(
         `
         SELECT u.user_id, u.email, u.user_role, s.salon_id
@@ -53,7 +52,7 @@ exports.verifyAnyToken = async (req, res, next) => {
       };
 
       return next();
-    } catch {
+    } catch (jwtErr) {
       // continue to Firebase if JWT fails
     }
 
@@ -90,10 +89,12 @@ exports.verifyAnyToken = async (req, res, next) => {
 
       return next();
     } catch (firebaseError) {
-      console.error("Firebase token verification failed:", firebaseError);
+      console.error(
+        "Firebase token verification failed:",
+        firebaseError.message
+      );
       return res.status(401).json({
-        error: "Unauthorized",
-        message: "Invalid or expired token",
+        error: "Invalid or expired token",
       });
     }
   } catch (error) {

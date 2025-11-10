@@ -14,12 +14,29 @@ router.get(
   userController.getAllUsers
 );
 
+router.get("/me", verifyAnyToken, async (req, res) => {
+  try {
+    res.status(200).json(req.user);
+  } catch (err) {
+    console.error("Error fetching current user:", err);
+    res.status(500).json({ error: "Failed to get user profile" });
+  }
+});
+
 // Admin or Owner: get all customers
 router.get(
   "/customers",
   verifyCustomJwt,
   checkRole("admin", "owner"),
   userController.getCustomers
+);
+
+// Owner or Staff: get salon-specific customers (used in NewAppointmentModal)
+router.get(
+  "/salon-customers",
+  verifyAnyToken,
+  checkRole("owner", "staff", "admin"),
+  userController.getSalonCustomers
 );
 
 // Admin or self: view single user
@@ -44,14 +61,6 @@ router.delete(
   verifyCustomJwt,
   checkRole("admin"),
   userController.deleteUser
-);
-
-// Owner or Staff: get salon-specific customers (used in NewAppointmentModal)
-router.get(
-  "/salon-customers",
-  verifyAnyToken,
-  checkRole("owner", "staff", "admin"),
-  userController.getSalonCustomers
 );
 
 module.exports = router;

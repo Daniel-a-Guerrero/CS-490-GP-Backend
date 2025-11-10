@@ -1,19 +1,12 @@
 const userService = require("./service");
 const { db } = require("../../config/database");
 
-/**
- * Create a new user (customer or staff)
- */
 const createUser = async (req, res) => {
   try {
     const { full_name, phone, email, user_role, salon_id } = req.body;
-
-    if (!full_name || !email) {
+    if (!full_name || !email)
       return res.status(400).json({ error: "Name and email are required" });
-    }
-
     const role = user_role === "staff" ? "staff" : "customer";
-
     const newUserId = await userService.createUser(
       full_name,
       phone,
@@ -21,7 +14,6 @@ const createUser = async (req, res) => {
       role,
       salon_id
     );
-
     res.status(201).json({
       message: `${
         role.charAt(0).toUpperCase() + role.slice(1)
@@ -34,9 +26,6 @@ const createUser = async (req, res) => {
   }
 };
 
-/**
- * Get all users (admin only)
- */
 const getAllUsers = async (req, res) => {
   try {
     const users = await userService.getAllUsers();
@@ -47,9 +36,6 @@ const getAllUsers = async (req, res) => {
   }
 };
 
-/**
- * Get all customers (admin or owner)
- */
 const getCustomers = async (req, res) => {
   try {
     const customers = await userService.getCustomers();
@@ -60,43 +46,32 @@ const getCustomers = async (req, res) => {
   }
 };
 
-/**
- * ✅ Get salon-specific customers automatically using req.user.salon_id
- */
 const getSalonCustomers = async (req, res) => {
   try {
-    const salonId = req.user.salon_id;
-
-    if (!salonId) {
-      return res.status(400).json({ error: "Salon ID missing for user" });
-    }
-
+    const { salon_id, search = "" } = req.query;
+    if (!salon_id) return res.status(400).json({ error: "Salon ID required" });
+    const keyword = `%${search}%`;
     const [rows] = await db.query(
       `
       SELECT 
-        u.user_id, 
-        u.full_name, 
-        u.email, 
-        u.phone, 
-        u.profile_pic
+        u.user_id, u.full_name, u.email, u.phone,
+        sc.address, sc.city, sc.state, sc.zip, sc.notes
       FROM salon_customers sc
       JOIN users u ON sc.user_id = u.user_id
       WHERE sc.salon_id = ?
+        AND (u.full_name LIKE ? OR u.email LIKE ? OR u.phone LIKE ?)
       ORDER BY u.full_name ASC
+      LIMIT 15
       `,
-      [salonId]
+      [salon_id, keyword, keyword, keyword]
     );
-
     res.json(rows);
   } catch (error) {
-    console.error("Error fetching salon customers:", error);
+    console.error("getSalonCustomers error:", error);
     res.status(500).json({ error: "Failed to fetch salon customers" });
   }
 };
 
-/**
- * Get user by ID
- */
 const getUserById = async (req, res) => {
   try {
     const { id } = req.params;
@@ -109,9 +84,6 @@ const getUserById = async (req, res) => {
   }
 };
 
-/**
- * Update a user
- */
 const updateUser = async (req, res) => {
   try {
     const { id } = req.params;
@@ -126,9 +98,6 @@ const updateUser = async (req, res) => {
   }
 };
 
-/**
- * Delete a user
- */
 const deleteUser = async (req, res) => {
   try {
     const { id } = req.params;

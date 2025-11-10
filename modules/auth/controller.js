@@ -1,17 +1,17 @@
 const authService = require("./service");
 const { db } = require("../../config/database");
 
-// ==========================
-// MANUAL SIGNUP
-// ==========================
+// Signup function
 exports.signupManual = async (req, res) => {
   const { full_name, phone, email, password, role } = req.body;
 
+  // check if all fields are filled
   if (!full_name || !phone || !email || !password) {
     return res.status(400).json({ error: "All fields are required" });
   }
 
   try {
+    // check if email already exists
     const existingUser = await authService.findUserByEmail(email);
     if (existingUser)
       return res.status(409).json({ error: "Email already registered" });
@@ -20,32 +20,41 @@ exports.signupManual = async (req, res) => {
     const userId = await authService.createUser(full_name, phone, email, userRole);
     await authService.createAuthRecord(userId, email, password);
 
-    res.status(201).json({ message: "User registered successfully" });
+    res.status(201).json({ message: "User registered" });
   } catch (err) {
     console.error("Signup error:", err);
-    res.status(500).json({ error: "Server error during signup" });
+    
+    // check for duplicate entries
+    if (err.code === 'ER_DUP_ENTRY') {
+      if (err.message.includes('phone')) {
+        return res.status(409).json({ error: "Phone number already registered" });
+      }
+      if (err.message.includes('email')) {
+        return res.status(409).json({ error: "Email already registered" });
+      }
+      return res.status(409).json({ error: "This information is already registered" });
+    }
+    
+    res.status(500).json({ error: "Server error during signup. Please try again." });
   }
 };
 
-// ==========================
-// MANUAL LOGIN
-// ==========================
+// Login function
 exports.loginManual = async (req, res) => {
   const { email, password } = req.body;
   if (!email || !password)
     return res.status(400).json({ error: "Email and password required" });
 
   try {
+    // find user
     const user = await authService.findUserByEmail(email);
     if (!user) return res.status(404).json({ error: "User not found" });
 
-    const valid = await authService.verifyPassword(
-      password,
-      user.password_hash
-    );
+    // check password
+    const valid = await authService.verifyPassword(password, user.password_hash);
     if (!valid) return res.status(401).json({ error: "Invalid password" });
 
-    // Check if 2FA is enabled
+    // check if 2FA is turned on
     const twoFactorStatus = await authService.get2FAStatus(user.user_id);
     if (twoFactorStatus && twoFactorStatus.length > 0) {
       const tempToken = authService.generateJwtToken({
@@ -185,7 +194,7 @@ exports.getCurrentUser = async (req, res) => {
 };
 
 exports.logout = async (req, res) => {
-  res.json({ message: "Logged out successfully" });
+  res.json({ message: "Logged out" });
 };
 
 // ==========================
@@ -231,7 +240,7 @@ exports.enable2FA = async (req, res) => {
       [userId, method, true, phoneNumber, email]
     );
     
-    res.status(200).json({ message: '2FA enabled successfully' });
+    res.status(200).json({ message: '2FA enabled' });
   } catch (error) {
     console.error('Enable 2FA error:', error);
     return res.status(500).json({ error: error.message });
@@ -247,7 +256,7 @@ exports.disable2FA = async (req, res) => {
       [userId]
     );
     
-    res.status(200).json({ message: '2FA disabled successfully' });
+    res.status(200).json({ message: '2FA disabled' });
   } catch (error) {
     console.error('Disable 2FA error:', error);
     return res.status(500).json({ error: error.message });
@@ -315,5 +324,40 @@ exports.verify2FA = async (req, res) => {
   } catch (error) {
     console.error('Verify 2FA error:', error);
     return res.status(500).json({ error: error.message });
+  }
+};
+
+exports.deleteAccount = async (req, res) => {
+  try {
+    const userId = req.user?.user_id || req.user?.id;
+    const userEmail = req.user?.email;
+    const { password } = req.body;
+
+    if (!userId) {
+      return res.status(401).json({ error: "User not authenticated" });
+    }
+
+    if (!password) {
+      return res.status(400).json({ error: "Password is required to delete account" });
+    }
+
+    const user = await authService.findUserByEmail(userEmail);
+    if (!user) {
+      return res.status(404).json({ error: "User not found" });
+    }
+
+    if (user.password_hash) {
+      const validPassword = await authService.verifyPassword(password, user.password_hash);
+      if (!validPassword) {
+        return res.status(401).json({ error: "Incorrect password" });
+      }
+    }
+
+    await authService.deleteUserAccount(userId);
+
+    res.json({ message: "Account deleted successfully" });
+  } catch (err) {
+    console.error("Delete account error:", err);
+    res.status(500).json({ error: "Failed to delete account" });
   }
 };

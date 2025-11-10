@@ -3,10 +3,7 @@ const jwt = require("jsonwebtoken");
 const { db } = require("../../config/database");
 const admin = require("../../config/firebaseAdmin");
 
-// =====================
-// MANUAL AUTH HELPERS
-// =====================
-
+// find user by email
 async function findUserByEmail(email) {
   const [rows] = await db.query(
     "SELECT u.*, a.password_hash FROM users u LEFT JOIN auth a ON u.user_id = a.user_id WHERE u.email = ?",
@@ -15,17 +12,20 @@ async function findUserByEmail(email) {
   return rows[0];
 }
 
+// create new user
 async function createUser(full_name, phone, email, role = "customer") {
-  // Generate a unique user_id using UUID or timestamp
-  const userId = Date.now().toString(36) + Math.random().toString(36).substr(2);
-  
-  const [userResult] = await db.query(
-    "INSERT INTO users (user_id, full_name, phone, email, user_role) VALUES (?, ?, ?, ?, ?)",
-    [userId, full_name, phone, email, role]
+  const result = await db.query(
+    "INSERT INTO users (full_name, phone, email, user_role) VALUES (?, ?, ?, ?)",
+    [full_name, phone, email, role]
   );
-  return userId;
+  const insertResult = Array.isArray(result) ? result[0] : result;
+  if (!insertResult || !insertResult.insertId) {
+    throw new Error(`Failed to create user`);
+  }
+  return insertResult.insertId;
 }
 
+// create auth record with hashed password
 async function createAuthRecord(userId, email, password) {
   const hash = await bcrypt.hash(password, 10);
   await db.query(
@@ -34,10 +34,12 @@ async function createAuthRecord(userId, email, password) {
   );
 }
 
+// check if password is correct
 async function verifyPassword(password, hash) {
   return await bcrypt.compare(password, hash);
 }
 
+// update login count
 async function updateLoginStats(userId) {
   await db.query(
     "UPDATE auth SET last_login = NOW(), login_count = login_count + 1 WHERE user_id = ?",
@@ -45,18 +47,17 @@ async function updateLoginStats(userId) {
   );
 }
 
+// generate JWT token
 function generateJwtToken(payload, expiresIn = "2h") {
   return jwt.sign(payload, process.env.JWT_SECRET, { expiresIn });
 }
 
-// =====================
-// FIREBASE HELPERS (EXTENDED FOR ROLE FLOW)
-// =====================
-
+// verify firebase token
 async function verifyFirebaseToken(idToken) {
   return await admin.auth().verifyIdToken(idToken);
 }
 
+// find firebase user
 async function findFirebaseUser(firebaseUid, email) {
   const [rows] = await db.query(
     "SELECT user_id, user_role FROM users WHERE firebase_uid = ? OR email = ? LIMIT 1",
@@ -65,15 +66,17 @@ async function findFirebaseUser(firebaseUid, email) {
   return rows[0];
 }
 
+// create firebase user
 async function createFirebaseUser(firebaseUid, email, role) {
-  // Use firebase_uid as user_id, or generate one
-  const userId = firebaseUid || Date.now().toString(36) + Math.random().toString(36).substr(2);
-  
-  const [result] = await db.query(
-    "INSERT INTO users (user_id, firebase_uid, email, user_role) VALUES (?, ?, ?, ?)",
-    [userId, firebaseUid, email, role]
+  const result = await db.query(
+    "INSERT INTO users (firebase_uid, email, user_role) VALUES (?, ?, ?)",
+    [firebaseUid, email, role]
   );
-  return userId;
+  const insertResult = Array.isArray(result) ? result[0] : result;
+  if (!insertResult || !insertResult.insertId) {
+    throw new Error(`Failed to create Firebase user`);
+  }
+  return insertResult.insertId;
 }
 
 function generateAppJwt(payload, expiresIn = "2h") {
@@ -128,7 +131,7 @@ async function verify2FACode(userId, code) {
     
     return false;
   } catch (error) {
-    console.log('2FA verification error:', error.message);
+    console.error('2FA verification error:', error.message);
     return false;
   }
 }
@@ -153,6 +156,24 @@ async function sendSMSCode(userId, phoneNumber, userName) {
   }
 }
 
+async function deleteUserAccount(userId) {
+  const connection = await db.getConnection();
+  try {
+    await connection.beginTransaction();
+
+    await connection.query("DELETE FROM auth WHERE user_id = ?", [userId]);
+    await connection.query("DELETE FROM users WHERE user_id = ?", [userId]);
+
+    await connection.commit();
+    return true;
+  } catch (error) {
+    await connection.rollback();
+    throw error;
+  } finally {
+    connection.release();
+  }
+}
+
 module.exports = {
   // Manual
   findUserByEmail,
@@ -173,4 +194,7 @@ module.exports = {
   get2FAStatus,
   verify2FACode,
   sendSMSCode,
+  
+  // Account
+  deleteUserAccount,
 };

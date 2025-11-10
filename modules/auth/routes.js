@@ -16,7 +16,7 @@ router.post("/login", authController.loginManual);
 
 router.get("/profile", verifyCustomJwt, (req, res) => {
   res.json({
-    message: "Manual JWT verified successfully",
+    message: "JWT verified",
     user: req.user,
   });
 });
@@ -161,7 +161,7 @@ const flexibleAuth = async (req, res, next) => {
 // Protected routes that work with both authentication methods
 router.get("/me", flexibleAuth, authController.getCurrentUser);
 router.post("/logout", flexibleAuth, (req, res) => {
-  res.json({ message: "Logged out successfully" });
+  res.json({ message: "Logged out" });
 });
 
 // 2FA routes - require authentication (use flexibleAuth to support both JWT and Firebase)
@@ -169,5 +169,8 @@ router.get("/2fa/status", flexibleAuth, authController.get2FAStatusController);
 router.post("/2fa/enable", flexibleAuth, authController.enable2FA);
 router.post("/2fa/disable", flexibleAuth, authController.disable2FA);
 router.post("/verify-2fa", authController.verify2FA);
+
+// Account management
+router.delete("/delete-account", flexibleAuth, authController.deleteAccount);
 
 module.exports = router;

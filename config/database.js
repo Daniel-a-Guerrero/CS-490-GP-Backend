@@ -25,7 +25,12 @@ async function testConnection() {
   }
 }
 
+function closePool() {
+  return pool.end();
+}
+
 module.exports = {
   db: pool,
   testConnection,
+  closePool,
 };

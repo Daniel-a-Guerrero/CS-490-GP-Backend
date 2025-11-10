@@ -1,12 +1,12 @@
 const express = require("express");
 const router = express.Router();
 const userController = require("./controller");
-const verifyAnyTokens = require("../../middleware/verifyAnyTokens");
+const { verifyAnyToken } = require("../../middleware/verifyAnyTokens");
 
-router.post("/", verifyAnyTokens, userController.createUser);
-router.get("/", verifyAnyTokens, userController.getAllUsers);
-router.get("/:id", verifyAnyTokens, userController.getUserById);
-router.put("/:id", verifyAnyTokens, userController.updateUser);
-router.delete("/:id", verifyAnyTokens, userController.deleteUser);
+router.post("/", verifyAnyToken, userController.createUser);
+router.get("/", verifyAnyToken, userController.getAllUsers);
+router.get("/:id", verifyAnyToken, userController.getUserById);
+router.put("/:id", verifyAnyToken, userController.updateUser);
+router.delete("/:id", verifyAnyToken, userController.deleteUser);
 
 module.exports = router;

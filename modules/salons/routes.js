@@ -1,29 +1,29 @@
 const express = require("express");
 const router = express.Router();
-const verifyAnyTokens = require("../../middleware/verifyAnyTokens");
+const { verifyAnyToken } = require("../../middleware/verifyAnyTokens");
 const salonController = require("./controller");
 
-router.get("/", verifyAnyTokens, salonController.getAllSalons);
+router.get("/", verifyAnyToken, salonController.getAllSalons);
 router.get(
   "/:salonId/staff",
-  verifyAnyTokens,
+  verifyAnyToken,
   salonController.getStaffBySalonId
 );
 router.get(
   "/staff/schedule",
-  verifyAnyTokens,
+  verifyAnyToken,
   salonController.getDailySchedule
 );
 router.get(
   "/user/visit-history",
-  verifyAnyTokens,
+  verifyAnyToken,
   salonController.getUserVisitHistory
 );
 
 // Route for services (supports cookie or Bearer token)
 router.get(
   "/:salon_id/services",
-  verifyAnyTokens,
+  verifyAnyToken,
   salonController.getSalonServices
 );
 

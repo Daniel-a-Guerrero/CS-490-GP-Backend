@@ -39,6 +39,27 @@ router.get(
   userController.getSalonCustomers
 );
 
+router.get(
+  "/salon-customers/stats",
+  verifyAnyToken,
+  checkRole("owner", "staff", "admin"),
+  userController.getSalonCustomerStats
+);
+
+router.get(
+  "/salon-customers/directory",
+  verifyAnyToken,
+  checkRole("owner", "staff", "admin"),
+  userController.getSalonCustomerDirectory
+);
+
+router.post(
+  "/salon-customers",
+  verifyAnyToken,
+  checkRole("owner", "staff", "admin"),
+  userController.addSalonCustomer
+);
+
 // Admin or self: view single user
 router.get(
   "/:id",

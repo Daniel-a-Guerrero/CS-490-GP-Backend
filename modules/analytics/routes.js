@@ -20,4 +20,5 @@ router.get(
 // same protection as overview
 router.get("/revenue-series", verifyAnyToken, checkRoles("owner","admin","staff"), ctrl.getRevenueSeries);
 router.get("/service-distribution", verifyAnyToken, checkRoles("owner","admin","staff"), ctrl.getServiceDistribution);
+router.get("/dashboard", verifyAnyToken, checkRoles("owner","admin","staff"), ctrl.getDashboard);
 module.exports = router;

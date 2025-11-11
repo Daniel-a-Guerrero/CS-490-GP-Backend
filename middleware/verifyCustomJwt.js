@@ -13,6 +13,7 @@ exports.verifyCustomJwt = (req, res, next) => {
     req.user = decoded;
     next();
   } catch (err) {
+    console.error("JWT verify error:", err);
     res.status(403).json({ error: "Invalid or expired token" });
   }
 };

@@ -4,7 +4,6 @@ const appointmentController = require("./controller");
 const { verifyAnyToken } = require("../../middleware/verifyAnyTokens");
 const checkRoles = require("../../middleware/checkRoles");
 
-// ✅ Create new appointment (supports auto-assign staff)
 router.post(
   "/create",
   verifyAnyToken,
@@ -17,6 +16,13 @@ router.get(
   verifyAnyToken,
   checkRoles("owner", "staff", "admin"),
   appointmentController.getAppointmentsBySalon
+);
+
+router.get(
+  "/salon-stats",
+  verifyAnyToken,
+  checkRoles("owner"),
+  appointmentController.getSalonStats
 );
 
 router.get(

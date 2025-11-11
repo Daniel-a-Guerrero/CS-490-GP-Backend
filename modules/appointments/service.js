@@ -1,5 +1,23 @@
 const { db } = require("../../config/database");
 
+const ALLOWED_STATUSES = new Set([
+  "pending",
+  "confirmed",
+  "completed",
+  "cancelled",
+]);
+
+function normalizeStatus(status, fallback = "pending") {
+  if (!status) return fallback;
+  const normalized = String(status).toLowerCase();
+  if (normalized === "canceled") return "cancelled";
+  if (normalized === "booked") return "confirmed";
+  if (ALLOWED_STATUSES.has(normalized)) {
+    return normalized;
+  }
+  return fallback;
+}
+
 /**
  * Helper: insert or update appointment_services rows
  */
@@ -48,12 +66,14 @@ async function createAppointment(
   serviceInput,
   scheduledTime,
   price,
-  notes
+  notes,
+  status
 ) {
+  const normalizedStatus = normalizeStatus(status, "pending");
   const sql = `
     INSERT INTO appointments 
       (user_id, salon_id, staff_id, scheduled_time, price, notes, status)
-    VALUES (?, ?, ?, ?, ?, ?, 'booked')
+    VALUES (?, ?, ?, ?, ?, ?, ?)
   `;
   const [result] = await db.query(sql, [
     userId,
@@ -62,6 +82,7 @@ async function createAppointment(
     scheduledTime,
     price,
     notes,
+    normalizedStatus,
   ]);
 
   const appointmentId = result.insertId;
@@ -171,8 +192,12 @@ async function updateAppointment(appointmentId, updates) {
       : current.scheduled_time,
     price: updates.hasOwnProperty("price") ? updates.price : current.price,
     notes: updates.hasOwnProperty("notes") ? updates.notes : current.notes,
-    status: updates.hasOwnProperty("status") ? updates.status : current.status,
+    status: current.status,
   };
+
+  if (updates.hasOwnProperty("status")) {
+    final.status = normalizeStatus(updates.status, current.status);
+  }
 
   const sql = `
     UPDATE appointments
@@ -214,6 +239,19 @@ async function cancelAppointment(appointmentId) {
   `;
   const [result] = await db.query(sql, [appointmentId]);
   return result.affectedRows;
+}
+
+/**
+ * Automatically cancel pending appointments that have been waiting >24h
+ */
+async function expireStalePendingAppointments() {
+  const sql = `
+    UPDATE appointments
+    SET status = 'cancelled', updated_at = CURRENT_TIMESTAMP
+    WHERE status = 'pending'
+      AND scheduled_time < DATE_SUB(NOW(), INTERVAL 24 HOUR)
+  `;
+  await db.query(sql);
 }
 
 /**
@@ -269,6 +307,7 @@ module.exports = {
   getAppointmentsBySalon,
   updateAppointment,
   cancelAppointment,
+  expireStalePendingAppointments,
   addAppointmentServices,
   getAppointmentServices,
 };

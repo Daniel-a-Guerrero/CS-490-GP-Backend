@@ -19,6 +19,7 @@ exports.createAppointment = async (req, res) => {
       scheduledTime,
       price,
       notes,
+      status,
       firstName,
       lastName,
       email,
@@ -120,6 +121,13 @@ exports.createAppointment = async (req, res) => {
     const serviceInput =
       Array.isArray(services) && services.length ? services : serviceId;
 
+    const allowedStatuses = ["pending", "confirmed", "completed", "cancelled"];
+    const requestedStatus =
+      typeof status === "string" ? status.trim().toLowerCase() : "";
+    const finalStatus = allowedStatuses.includes(requestedStatus)
+      ? requestedStatus
+      : "pending";
+
     const appointmentId = await appointmentService.createAppointment(
       userId,
       finalSalonId,
@@ -127,7 +135,8 @@ exports.createAppointment = async (req, res) => {
       serviceInput,
       scheduledTime,
       price || 0,
-      notes
+      notes,
+      finalStatus
     );
 
     const [[salonInfo]] = await db.query(
@@ -226,6 +235,9 @@ exports.updateAppointment = async (req, res) => {
 
     res.json({ message: "Appointment updated successfully", updated });
   } catch (error) {
+    if (error?.code === "INVALID_APPOINTMENT_STATUS") {
+      return res.status(400).json({ error: error.message });
+    }
     console.error("Error updating appointment:", error);
     res.status(500).json({ error: "Failed to update appointment" });
   }
@@ -256,6 +268,7 @@ exports.cancelAppointment = async (req, res) => {
 
 exports.getAppointmentsBySalon = async (req, res) => {
   try {
+    await appointmentService.expireStalePendingAppointments();
     const role = req.user.role;
     const tokenSalonId = req.user.salon_id;
     const salonId =
@@ -279,5 +292,61 @@ exports.getAppointmentsBySalon = async (req, res) => {
   } catch (error) {
     console.error("Error fetching salon appointments:", error);
     res.status(500).json({ error: "Failed to fetch salon appointments" });
+  }
+};
+
+// ======================= Today's SUMMARY =======================
+exports.getSalonStats = async (req, res) => {
+  try {
+    await appointmentService.expireStalePendingAppointments();
+    const salon_id = Number(req.query.salon_id);
+    if (!salon_id)
+      return res.status(400).json({ error: "Missing salon_id parameter" });
+
+    const [rows] = await db.query(
+      `
+      SELECT
+        COUNT(
+          CASE
+            WHEN DATE(a.scheduled_time) = CURDATE()
+              AND a.status <> 'cancelled'
+            THEN 1
+          END
+        ) AS todays_appointments,
+        COUNT(
+          CASE
+            WHEN a.status = 'confirmed'
+              AND DATE(a.scheduled_time) = CURDATE()
+            THEN 1
+          END
+        ) AS confirmed,
+        COUNT(
+          CASE
+            WHEN a.status = 'pending'
+              AND DATE(a.scheduled_time) = CURDATE()
+            THEN 1
+          END
+        ) AS pending,
+        COALESCE(
+          SUM(
+            CASE
+              WHEN DATE(a.scheduled_time) = CURDATE()
+                AND a.status IN ('confirmed','completed')
+              THEN a.price
+              ELSE 0
+            END
+          ),
+          0
+        ) AS revenue_today
+      FROM appointments a
+      WHERE a.salon_id = ?
+      `,
+      [salon_id]
+    );
+
+    return res.status(200).json(rows[0]);
+  } catch (err) {
+    console.error("Error fetching salon stats:", err);
+    res.status(500).json({ error: "Server error fetching salon stats" });
   }
 };

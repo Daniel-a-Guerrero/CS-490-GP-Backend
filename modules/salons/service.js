@@ -28,6 +28,20 @@ async function createSalon({ ownerId, name, address, description, phone, city, e
   
   // Add default staff, services, and availability
   try {
+    // Create default staff roles
+    const defaultRoles = ['Stylist', 'Hair Stylist', 'Colorist', 'Technician', 'Nail Artist', 'Receptionist', 'Barber'];
+    for (const roleName of defaultRoles) {
+      try {
+        await db.query(
+          'INSERT INTO staff_roles (salon_id, staff_role_name) VALUES (?, ?)',
+          [salonId, roleName]
+        );
+      } catch (roleErr) {
+        console.log(`Failed to create role ${roleName}:`, roleErr.message);
+      }
+    }
+    console.log(`Created default staff roles for salon ${salonId}`);
+    
     // Add owner as staff member
     const [staffResult] = await db.query(
       `INSERT INTO staff (user_id, salon_id, role, specialization, is_active) 

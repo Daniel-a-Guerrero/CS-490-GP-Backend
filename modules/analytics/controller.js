@@ -7,8 +7,8 @@ exports.getOverview = async (req, res) => {
     if (!salonId) {
       return res.status(400).json({ message: "salonId is required as a query param" });
     }
-    const { start, end } = req.query;
-    const data = await analyticsService.getOverview({ salonId, start, end });
+    const { start, end, range } = req.query;
+    const data = await analyticsService.getOverview({ salonId, start, end, range });
     res.json({ ok: true, data });
   } catch (err) {
     console.error("analytics.getOverview error:", err);
@@ -41,5 +41,25 @@ exports.getServiceDistribution = async (req, res) => {
   } catch (e) {
     console.error("analytics.getServiceDistribution error:", e);
     res.status(500).json({ ok: false, message: "Failed to compute service distribution" });
+  }
+};
+
+exports.getDashboard = async (req, res) => {
+  try {
+    const salonId = Number(req.query.salonId);
+    if (!salonId) {
+      return res.status(400).json({ ok: false, message: "salonId is required" });
+    }
+    const data = await analyticsService.getDashboardAnalytics({ salonId });
+    res.json({ ok: true, data });
+  } catch (err) {
+    console.error("analytics.getDashboard error:", err);
+    res
+      .status(500)
+      .json({
+        ok: false,
+        message: err?.message || "Failed to load analytics dashboard",
+        details: err?.sqlMessage || err?.stack,
+      });
   }
 };

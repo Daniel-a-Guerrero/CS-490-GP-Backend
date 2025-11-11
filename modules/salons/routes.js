@@ -11,6 +11,7 @@ router.get(
 );
 
 router.get("/", verifyAnyToken, salonController.getAllSalons);
+router.get("/check-owner", verifyAnyToken, salonController.checkOwnerSalon);
 router.get(
   "/:salonId/staff",
   verifyAnyToken,

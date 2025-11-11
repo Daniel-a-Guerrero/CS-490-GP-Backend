@@ -178,3 +178,41 @@ exports.getCustomerVisitHistory = async (req, res) => {
     res.status(500).json({ error: "Failed to fetch customer visit history" });
   }
 };
+
+// Check if owner has a salon
+exports.checkOwnerSalon = async (req, res) => {
+  try {
+    const userId = req.user?.user_id;
+    
+    if (!userId) {
+      return res.status(401).json({ error: "Not authenticated" });
+    }
+
+    const [salons] = await db.query(
+      "SELECT salon_id, name, slug, address, city, phone, email, profile_picture, status FROM salons WHERE owner_id = ? LIMIT 1",
+      [userId]
+    );
+
+    if (salons && salons.length > 0) {
+      return res.json({
+        hasSalon: true,
+        salon: {
+          salon_id: salons[0].salon_id,
+          salon_name: salons[0].name,
+          slug: salons[0].slug,
+          address: salons[0].address,
+          city: salons[0].city,
+          phone: salons[0].phone,
+          email: salons[0].email,
+          profile_picture: salons[0].profile_picture,
+          status: salons[0].status,
+        },
+      });
+    }
+
+    return res.json({ hasSalon: false });
+  } catch (error) {
+    console.error("Error checking owner salon:", error);
+    res.status(500).json({ error: "Failed to check salon" });
+  }
+};

@@ -1,6 +1,6 @@
 const axios = require('axios');
 
-// Using ClickSend for SMS since Twilio requires A2P registration
+// Using ClickSend for SMS
 class ClickSendService {
     constructor() {
         this.username = process.env.CLICKSEND_USERNAME;
@@ -45,6 +45,7 @@ class ClickSendService {
                 throw new Error(`SMS not successful: ${JSON.stringify(response.data)}`);
             }
 
+            console.log('ClickSend SMS sent successfully:', first.message_id);
             return { success: true, messageId: first.message_id };
         } catch (error) {
             console.error('ClickSend SMS error:', error.message);

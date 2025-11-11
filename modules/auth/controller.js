@@ -100,7 +100,7 @@ exports.loginManual = async (req, res) => {
       path: "/",
     });
 
-    res.json({ message: "Login successful", token, user: { id: user.user_id, email: user.email, role: user.user_role, full_name: user.full_name } });
+    res.json({ message: "Login successful", token, user: { id: user.user_id, email: user.email, role: user.user_role, full_name: user.full_name, phone: user.phone } });
   } catch (err) {
     console.error("Login error:", err);
     res.status(500).json({ error: "Server error during login" });
@@ -324,7 +324,7 @@ exports.verify2FA = async (req, res) => {
     });
     
     // Get user details
-    const [rows] = await db.query('SELECT user_id, email, user_role, full_name FROM users WHERE user_id = ?', [userId]);
+    const [rows] = await db.query('SELECT user_id, email, user_role, full_name, phone FROM users WHERE user_id = ?', [userId]);
     
     res.status(200).json({
       message: '2FA verification successful',

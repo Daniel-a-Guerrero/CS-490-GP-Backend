@@ -170,8 +170,6 @@ router.post("/2fa/enable", flexibleAuth, authController.enable2FA);
 router.post("/2fa/disable", flexibleAuth, authController.disable2FA);
 router.post("/verify-2fa", authController.verify2FA);
 router.post("/refresh", authController.refreshToken);
-
-// Delete account route
 router.delete("/delete-account", flexibleAuth, authController.deleteAccount);
 
 // Temporary debug route to verify token decoding and salon binding

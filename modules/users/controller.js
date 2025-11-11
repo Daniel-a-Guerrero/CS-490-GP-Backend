@@ -185,6 +185,11 @@ const getSalonCustomerDirectory = async (req, res) => {
         u.full_name,
         u.email,
         u.phone,
+        sc.address,
+        sc.city,
+        sc.state,
+        sc.zip,
+        sc.notes,
         COALESCE(at.total_visits, 0) AS total_visits,
         COALESCE(at.total_spent, 0) AS total_spent,
         at.last_visit,
@@ -298,6 +303,92 @@ const addSalonCustomer = async (req, res) => {
   }
 };
 
+const updateSalonCustomer = async (req, res) => {
+  try {
+    const salonId = Number(req.body.salon_id || req.user?.salon_id);
+    const { userId } = req.params;
+    if (!salonId || !userId) {
+      return res.status(400).json({ error: "Salon ID and user ID required" });
+    }
+
+    const [existing] = await db.query(
+      "SELECT 1 FROM salon_customers WHERE salon_id = ? AND user_id = ? LIMIT 1",
+      [salonId, userId]
+    );
+    if (!existing.length) {
+      return res.status(404).json({ error: "Customer not found for this salon" });
+    }
+
+    const {
+      full_name,
+      email,
+      phone,
+      address,
+      city,
+      state,
+      zip,
+      notes,
+    } = req.body;
+
+    if (full_name || phone || email) {
+      await db.query(
+        `
+        UPDATE users
+        SET
+          full_name = COALESCE(?, full_name),
+          email = COALESCE(?, email),
+          phone = COALESCE(?, phone),
+          updated_at = CURRENT_TIMESTAMP
+        WHERE user_id = ?
+        `,
+        [full_name || null, email || null, phone || null, userId]
+      );
+    }
+
+    await db.query(
+      `
+      UPDATE salon_customers
+      SET
+        address = COALESCE(?, address),
+        city = COALESCE(?, city),
+        state = COALESCE(?, state),
+        zip = COALESCE(?, zip),
+        notes = COALESCE(?, notes)
+      WHERE salon_id = ? AND user_id = ?
+      `,
+      [address || null, city || null, state || null, zip || null, notes || null, salonId, userId]
+    );
+
+    res.json({ message: "Customer updated successfully" });
+  } catch (error) {
+    console.error("updateSalonCustomer error:", error);
+    res.status(500).json({ error: "Failed to update customer" });
+  }
+};
+
+const deleteSalonCustomer = async (req, res) => {
+  try {
+    const salonId = Number(req.query.salon_id || req.user?.salon_id);
+    const { userId } = req.params;
+    if (!salonId || !userId) {
+      return res.status(400).json({ error: "Salon ID and user ID required" });
+    }
+
+    const [result] = await db.query(
+      "DELETE FROM salon_customers WHERE salon_id = ? AND user_id = ?",
+      [salonId, userId]
+    );
+    if (result.affectedRows === 0) {
+      return res.status(404).json({ error: "Customer not found for this salon" });
+    }
+
+    res.json({ message: "Customer removed from salon" });
+  } catch (error) {
+    console.error("deleteSalonCustomer error:", error);
+    res.status(500).json({ error: "Failed to remove customer" });
+  }
+};
+
 const getUserById = async (req, res) => {
   try {
     const { id } = req.params;
@@ -345,6 +436,8 @@ module.exports = {
   getSalonCustomerStats,
   getSalonCustomerDirectory,
   addSalonCustomer,
+  updateSalonCustomer,
+  deleteSalonCustomer,
   getUserById,
   updateUser,
   deleteUser,

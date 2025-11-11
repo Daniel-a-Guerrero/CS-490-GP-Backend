@@ -1,10 +1,7 @@
 // modules/analytics/routes.js
 const express = require("express");
 const router = express.Router();
-
 const ctrl = require("./controller");
-
-// middlewares you shared
 const { verifyAnyToken } = require("../../middleware/verifyAnyTokens"); // adjust path/name to your file
 const checkRoles = require("../../middleware/checkRoles");
 
@@ -16,9 +13,23 @@ router.get(
   ctrl.getOverview
 );
 
-
 // same protection as overview
-router.get("/revenue-series", verifyAnyToken, checkRoles("owner","admin","staff"), ctrl.getRevenueSeries);
-router.get("/service-distribution", verifyAnyToken, checkRoles("owner","admin","staff"), ctrl.getServiceDistribution);
-router.get("/dashboard", verifyAnyToken, checkRoles("owner","admin","staff"), ctrl.getDashboard);
+router.get(
+  "/revenue-series",
+  verifyAnyToken,
+  checkRoles("owner", "admin", "staff"),
+  ctrl.getRevenueSeries
+);
+router.get(
+  "/service-distribution",
+  verifyAnyToken,
+  checkRoles("owner", "admin", "staff"),
+  ctrl.getServiceDistribution
+);
+router.get(
+  "/dashboard",
+  verifyAnyToken,
+  checkRoles("owner", "admin", "staff"),
+  ctrl.getDashboard
+);
 module.exports = router;

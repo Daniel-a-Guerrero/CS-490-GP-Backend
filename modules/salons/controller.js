@@ -1,129 +1,22 @@
 const { query } = require("../../config/database");
 const salonService = require("./service");
 
-// Check if owner has a salon
-exports.checkOwnerSalon = async (req, res) => {
-  try {
-    const ownerId = req.user.user_id;
-    
-    const rows = await query(
-      "SELECT * FROM salons WHERE owner_id = ?",
-      [ownerId]
-    );
-
-    if (rows.length > 0) {
-      res.json({ hasSalon: true, salon: rows[0] });
-    } else {
-      res.json({ hasSalon: false });
-    }
-  } catch (err) {
-    console.error("Check salon error:", err);
-    res.status(500).json({ error: "Failed to check salon" });
-  }
-};
-
-// Create/Register a new salon (owner only)
-exports.createSalon = async (req, res) => {
-  try {
-    const ownerId = req.user.user_id;
-    const { name, address, phone, city, description, email, website } = req.body;
-
-    if (!name || !address || !phone) {
-      return res.status(400).json({ error: "Name, address, and phone are required" });
-    }
-
-    const existingSalon = await query(
-      "SELECT salon_id FROM salons WHERE owner_id = ?",
-      [ownerId]
-    );
-
-    if (existingSalon.length > 0) {
-      return res.status(409).json({ error: "You already have a salon registered" });
-    }
-
-    const profile_picture = req.file ? `/uploads/${req.file.filename}` : null;
-
-    const salon = await salonService.createSalon({
-      ownerId,
-      name,
-      address,
-      phone,
-      city,
-      description,
-      email,
-      website,
-      profile_picture,
-    });
-
-    res.status(201).json({ message: "Salon registered successfully", salon });
-  } catch (err) {
-    console.error("Create salon error:", err);
-    console.error("Error details:", err.message);
-    console.error("Error stack:", err.stack);
-    res.status(500).json({ error: err.message || "Failed to create salon" });
-  }
-};
-
-// Get all active salons for browsing
+//As a user, I want to browse available salons so that I can choose where to book
 exports.getAllSalons = async (req, res) => {
+  if (!req.user) {
+    return res.status(401).json({ error: "Unauthorized" });
+  }
+  //free days sent by the user to filter salons
+  const { freeDays } = req.query; // e.g., ?freeDays=Monday,Tuesday
+  const daysArray = freeDays ? freeDays.split(",") : [];
   try {
-    const { q, page, limit } = req.query;
-    const salons = await salonService.getSalons({ 
-      q, 
-      page: page ? parseInt(page) : 1, 
-      limit: limit ? parseInt(limit) : 100 
-    });
+    const salons = await query(
+      "select s.salon_id, sa.* from salon_platform.staff_availability sa join salon_platform.staff s  where sa.day_of_week IN ? and s.staff_id = sa.staff_id",
+      [daysArray]
+    );
     res.json(salons);
   } catch (error) {
-    console.error("Get salons error:", error);
     res.status(500).json({ error: "Failed to fetch salons" });
-  }
-};
-
-// Get single salon by ID
-exports.getSalonById = async (req, res) => {
-  try {
-    const salonId = req.params.id;
-    const rows = await query(
-      "SELECT * FROM salons WHERE salon_id = ? AND status = 'active'",
-      [salonId]
-    );
-
-    if (rows.length === 0) {
-      return res.status(404).json({ error: "Salon not found" });
-    }
-
-    res.json(rows[0]);
-  } catch (error) {
-    console.error("Get salon by ID error:", error);
-    res.status(500).json({ error: "Failed to fetch salon" });
-  }
-};
-
-// Upload salon profile picture
-exports.uploadProfilePicture = async (req, res) => {
-  try {
-    const salonId = req.body.salon_id || req.params.salon_id;
-    
-    if (!salonId) {
-      return res.status(400).json({ error: "Salon ID required" });
-    }
-    
-    if (!req.file) {
-      return res.status(400).json({ error: "Profile picture file required" });
-    }
-
-    const profile_picture = `/uploads/${req.file.filename}`;
-    
-    await query(
-      "UPDATE salons SET profile_picture = ? WHERE salon_id = ?",
-      [profile_picture, salonId]
-    );
-
-    res.json({ message: "Profile picture updated", profile_picture });
-  } catch (error) {
-    console.error("Upload profile picture error:", error);
-    res.status(500).json({ error: "Failed to upload profile picture" });
   }
 };
 
@@ -137,6 +30,52 @@ exports.getStaffBySalonId = async (req, res) => {
     res.json(staff);
   } catch (error) {
     res.status(500).json({ error: "Failed to fetch staff for the salon" });
+  }
+};
+
+// Fixed and improved getSalonServices
+exports.getSalonServices = async (req, res) => {
+  try {
+    const { salon_id } = req.params;
+    if (!salon_id) {
+      return res.status(400).json({ error: "Salon ID required" });
+    }
+
+    const services = await query(
+      `
+      SELECT 
+        s.service_id,
+        s.custom_name,
+        s.price,
+        s.duration,
+        s.description,
+        c.name AS category_name,
+        m.name AS main_category
+      FROM services s
+      JOIN service_categories c ON s.category_id = c.category_id
+      JOIN main_categories m ON c.main_category_id = m.main_category_id
+      WHERE s.salon_id = ? AND s.is_active = 1
+      ORDER BY m.name, c.name, s.custom_name;
+      `,
+      [salon_id]
+    );
+
+    console.log(
+      "DEBUG: Found services:",
+      services.length,
+      "for salon_id:",
+      salon_id
+    );
+
+    //  Return empty array instead of 404 to prevent front-end error
+    if (!services || services.length === 0) {
+      return res.status(200).json([]);
+    }
+
+    return res.status(200).json(services);
+  } catch (error) {
+    console.error(" getSalonServices error:", error);
+    return res.status(500).json({ error: "Failed to fetch salon services" });
   }
 };
 
@@ -183,8 +122,8 @@ exports.getDailySchedule = async (req, res) => {
   if (!req.user) {
     return res.status(401).json({ error: "Unauthorized" });
   }
-  const staffId = req.user.uid;
-  const { date } = req.query;
+  const staffId = req.user.uid; // Assuming the Firebase UID matches the staff ID
+  const { date } = req.query; // e.g., ?date=2023-10-15
   if (!date) {
     return res.status(400).json({ error: "Date is required" });
   }
@@ -221,8 +160,7 @@ exports.getUserVisitHistory = async (req, res) => {
     res.status(500).json({ error: "Failed to fetch visit history" });
   }
 };
-
-// Get customer visit history (for salon owner)
+//U2: As a salon owner, I want to see customer visit histories so that I can provide personalized service
 exports.getCustomerVisitHistory = async (req, res) => {
   if (!req.user) {
     return res.status(401).json({ error: "Unauthorized" });

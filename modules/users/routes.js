@@ -60,6 +60,20 @@ router.post(
   userController.addSalonCustomer
 );
 
+router.put(
+  "/salon-customers/:userId",
+  verifyAnyToken,
+  checkRole("owner", "staff", "admin"),
+  userController.updateSalonCustomer
+);
+
+router.delete(
+  "/salon-customers/:userId",
+  verifyAnyToken,
+  checkRole("owner", "staff", "admin"),
+  userController.deleteSalonCustomer
+);
+
 // Admin or self: view single user
 router.get(
   "/:id",

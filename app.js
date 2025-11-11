@@ -24,6 +24,9 @@ const { db, testConnection } = require("./config/database");
 
 const app = express();
 
+// Serve uploaded files statically
+app.use('/uploads', express.static('public/uploads'));
+
 app.use(helmet());
 app.use(
   cors({

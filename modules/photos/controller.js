@@ -25,3 +25,50 @@ exports.getServicePhotos = async (req, res) => {
   }
 };
 
+// Get all photos for a salon
+exports.getSalonGallery = async (req, res) => {
+  try {
+    const salon_id = req.params.salon_id;
+    const photos = await photoService.getSalonGallery(salon_id);
+    res.json(photos);
+  } catch (err) {
+    console.error("Get salon gallery error:", err);
+    res.status(500).json({ error: err.message });
+  }
+};
+
+// Add a new photo to salon gallery
+exports.addSalonPhoto = async (req, res) => {
+  try {
+    const { salon_id, caption } = req.body;
+    
+    if (!salon_id) {
+      return res.status(400).json({ error: "Salon ID required" });
+    }
+    
+    if (!req.file) {
+      return res.status(400).json({ error: "Photo file required" });
+    }
+
+    const photo_url = `/uploads/${req.file.filename}`;
+    
+    const photo_id = await photoService.addSalonPhoto(salon_id, photo_url, caption);
+    res.json({ message: "Photo added to gallery", photo_id, photo_url });
+  } catch (err) {
+    console.error("Add salon photo error:", err);
+    res.status(500).json({ error: err.message });
+  }
+};
+
+// Delete a photo from gallery
+exports.deleteSalonPhoto = async (req, res) => {
+  try {
+    const photo_id = req.params.photo_id;
+    await photoService.deleteSalonPhoto(photo_id);
+    res.json({ message: "Photo deleted" });
+  } catch (err) {
+    console.error("Delete salon photo error:", err);
+    res.status(500).json({ error: err.message });
+  }
+};
+

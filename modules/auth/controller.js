@@ -126,6 +126,7 @@ exports.loginManual = async (req, res) => {
         email: user.email,
         role: user.user_role,
         full_name: user.full_name,
+        phone: user.phone,
       },
     });
   } catch (err) {

@@ -83,6 +83,10 @@ router.post("/set-role", async (req, res) => {
       phone,
       role,
       businessName,
+      businessAddress,
+      businessEmail,
+      businessPhone,
+      businessWebsite,
     } = req.body;
 
     if (!firebaseUid || !email || !role) {
@@ -102,10 +106,16 @@ router.post("/set-role", async (req, res) => {
     const userId = result.insertId;
 
     if (role === "owner" && businessName) {
+      // Generate slug from business name
+      const slug = businessName
+        .toLowerCase()
+        .replace(/[^a-z0-9]+/g, '-')
+        .replace(/^-+|-+$/g, '');
+      
       await db.query(
-        `INSERT INTO salons (owner_id, salon_name, approved)
-         VALUES (?, ?, 'pending')`,
-        [userId, businessName]
+        `INSERT INTO salons (owner_id, name, slug, address, email, phone, website, status)
+         VALUES (?, ?, ?, ?, ?, ?, ?, 'pending')`,
+        [userId, businessName, slug, businessAddress || null, businessEmail || null, businessPhone || null, businessWebsite || null]
       );
     }
 

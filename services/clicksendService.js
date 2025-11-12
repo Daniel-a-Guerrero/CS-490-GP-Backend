@@ -1,16 +1,14 @@
 const axios = require('axios');
 
-// Using ClickSend for SMS
 class ClickSendService {
     constructor() {
         this.username = process.env.CLICKSEND_USERNAME;
-        this.apiKey = process.env.CLICKSEND_APIKEY;
+        this.apiKey = process.env.CLICKSEND_API_KEY;
         this.fromName = process.env.OTP_FROM_NAME || 'StyGo';
     }
 
     async send2FACode(phoneNumber, code) {
         if (!this.username || !this.apiKey) {
-            console.warn('ClickSend credentials not found. SMS service will not be available.');
             return { success: false, error: 'SMS service not available' };
         }
 
@@ -45,7 +43,6 @@ class ClickSendService {
                 throw new Error(`SMS not successful: ${JSON.stringify(response.data)}`);
             }
 
-            console.log('ClickSend SMS sent successfully:', first.message_id);
             return { success: true, messageId: first.message_id };
         } catch (error) {
             console.error('ClickSend SMS error:', error.message);

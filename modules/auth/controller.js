@@ -6,7 +6,7 @@ const { db } = require("../../config/database");
 // MANUAL SIGNUP
 // ==========================
 exports.signupManual = async (req, res) => {
-  const { full_name, phone, email, password, role } = req.body;
+  const { full_name, phone, email, password, role, businessName, businessAddress, businessWebsite } = req.body;
 
   if (!full_name || !phone || !email || !password) {
     return res.status(400).json({ error: "All fields are required" });
@@ -25,6 +25,21 @@ exports.signupManual = async (req, res) => {
     );
 
     await authService.createAuthRecord(userId, email, password);
+
+    // If user is owner, create salon record with business info
+    if (userRole === "owner" && businessName) {
+      // Generate slug from business name
+      const slug = businessName
+        .toLowerCase()
+        .replace(/[^a-z0-9]+/g, '-')
+        .replace(/^-+|-+$/g, '');
+      
+      await db.query(
+        `INSERT INTO salons (owner_id, name, slug, address, email, phone, website, status)
+         VALUES (?, ?, ?, ?, ?, ?, ?, 'pending')`,
+        [userId, businessName, slug, businessAddress || null, email, phone, businessWebsite || null]
+      );
+    }
 
     res.status(201).json({ message: "User registered successfully" });
   } catch (err) {

@@ -6,16 +6,45 @@ exports.getAllSalons = async (req, res) => {
   if (!req.user) {
     return res.status(401).json({ error: "Unauthorized" });
   }
-  //free days sent by the user to filter salons
-  const { freeDays } = req.query; // e.g., ?freeDays=Monday,Tuesday
-  const daysArray = freeDays ? freeDays.split(",") : [];
+  
   try {
-    const salons = await query(
-      "select s.salon_id, sa.* from salon_platform.staff_availability sa join salon_platform.staff s  where sa.day_of_week IN ? and s.staff_id = sa.staff_id",
-      [daysArray]
-    );
+    const { q, page = 1, limit = 50 } = req.query;
+    const offset = (page - 1) * limit;
+    
+    let sql = `
+      SELECT 
+        s.salon_id,
+        s.name,
+        s.slug,
+        s.address,
+        s.city,
+        s.phone,
+        s.email,
+        s.website,
+        s.description,
+        s.profile_picture,
+        s.status,
+        s.created_at,
+        u.full_name as owner_name
+      FROM salons s
+      LEFT JOIN users u ON u.user_id = s.owner_id
+      WHERE s.status = 'active' OR s.status = 'pending'
+    `;
+    
+    const params = [];
+    
+    if (q) {
+      sql += " AND (s.name LIKE ? OR s.description LIKE ? OR s.city LIKE ?)";
+      params.push(`%${q}%`, `%${q}%`, `%${q}%`);
+    }
+    
+    sql += " ORDER BY s.created_at DESC LIMIT ? OFFSET ?";
+    params.push(parseInt(limit, 10), parseInt(offset, 10));
+    
+    const salons = await query(sql, params);
     res.json(salons);
   } catch (error) {
+    console.error("Error fetching salons:", error);
     res.status(500).json({ error: "Failed to fetch salons" });
   }
 };
@@ -33,7 +62,6 @@ exports.getStaffBySalonId = async (req, res) => {
   }
 };
 
-// Fixed and improved getSalonServices
 exports.getSalonServices = async (req, res) => {
   try {
     const { salon_id } = req.params;
@@ -189,7 +217,7 @@ exports.checkOwnerSalon = async (req, res) => {
     }
 
     const salons = await query(
-      "SELECT salon_id, name, slug, address, city, phone, email, profile_picture, status FROM salons WHERE owner_id = ? LIMIT 1",
+      "SELECT salon_id, name, slug, address, city, phone, email, website, description, profile_picture, status FROM salons WHERE owner_id = ? LIMIT 1",
       [userId]
     );
 
@@ -198,12 +226,14 @@ exports.checkOwnerSalon = async (req, res) => {
         hasSalon: true,
         salon: {
           salon_id: salons[0].salon_id,
-          salon_name: salons[0].name,
+          name: salons[0].name,
           slug: salons[0].slug,
           address: salons[0].address,
           city: salons[0].city,
           phone: salons[0].phone,
           email: salons[0].email,
+          website: salons[0].website,
+          description: salons[0].description,
           profile_picture: salons[0].profile_picture,
           status: salons[0].status,
         },
@@ -214,5 +244,204 @@ exports.checkOwnerSalon = async (req, res) => {
   } catch (error) {
     console.error("Error checking owner salon:", error);
     res.status(500).json({ error: "Failed to check salon" });
+  }
+};
+
+// Create/Register a new salon
+exports.createSalon = async (req, res) => {
+  try {
+    const userId = req.user?.user_id;
+    
+    if (!userId) {
+      return res.status(401).json({ error: "Not authenticated" });
+    }
+
+    console.log("Request body:", req.body);
+    console.log("Request files:", req.files);
+
+    // Check if user already has a salon
+    const existingSalons = await query(
+      "SELECT salon_id FROM salons WHERE owner_id = ? LIMIT 1",
+      [userId]
+    );
+
+    if (existingSalons && existingSalons.length > 0) {
+      return res.status(400).json({ error: "You already have a salon registered" });
+    }
+
+    const { 
+      name,
+      salon_name,
+      address, 
+      phone, 
+      city, 
+      email, 
+      website, 
+      description 
+    } = req.body;
+
+    // Accept both 'name' and 'salon_name' fields from frontend
+    const salonName = name || salon_name;
+
+    // Validate required fields
+    if (!salonName || !address || !phone) {
+      return res.status(400).json({ 
+        error: "Salon name, address, and phone are required" 
+      });
+    }
+
+    // Generate a slug from the salon name
+    const slug = salonName
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, '-')
+      .replace(/^-+|-+$/g, '');
+
+    // Handle profile picture upload if provided
+    let profilePicturePath = null;
+    if (req.files && req.files.length > 0) {
+      const file = req.files[0];
+      profilePicturePath = `/uploads/${file.filename}`;
+    }
+
+    // Insert the new salon
+    const result = await query(
+      `INSERT INTO salons 
+       (owner_id, name, slug, address, city, phone, email, website, description, profile_picture, status) 
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending')`,
+      [userId, salonName, slug, address, city || null, phone, email || null, website || null, description || null, profilePicturePath]
+    );
+
+    return res.status(201).json({
+      message: "Salon registered successfully",
+      salon: {
+        salon_id: result.insertId,
+        salon_name: salonName,
+        slug,
+        address,
+        city,
+        phone,
+        email,
+        website,
+        description,
+        profile_picture: profilePicturePath,
+        status: 'pending'
+      }
+    });
+  } catch (error) {
+    console.error("Error creating salon:", error);
+    res.status(500).json({ error: "Failed to register salon" });
+  }
+};
+
+// Get salon by ID (for settings view)
+exports.getSalonById = async (req, res) => {
+  try {
+    const { salon_id } = req.params;
+    const userId = req.user?.user_id;
+
+    const salons = await query(
+      "SELECT s.salon_id, s.name, s.slug, s.address, s.city, s.phone, s.email, s.website, s.description, s.profile_picture, s.status, s.created_at, s.owner_id FROM salons s WHERE s.salon_id = ?",
+      [salon_id]
+    );
+
+    if (!salons || salons.length === 0) {
+      return res.status(404).json({ error: "Salon not found" });
+    }
+
+    const salon = salons[0];
+
+    // Only owner can view full salon details
+    if (salon.owner_id !== userId && req.user?.user_role !== 'admin') {
+      return res.status(403).json({ error: "Not authorized to view this salon" });
+    }
+
+    return res.json(salon);
+  } catch (error) {
+    console.error("Error fetching salon:", error);
+    res.status(500).json({ error: "Failed to fetch salon" });
+  }
+};
+
+// Update salon settings
+exports.updateSalon = async (req, res) => {
+  try {
+    const { salon_id } = req.params;
+    const userId = req.user?.user_id;
+
+    // Verify ownership
+    const salons = await query(
+      "SELECT owner_id FROM salons WHERE salon_id = ?",
+      [salon_id]
+    );
+
+    if (!salons || salons.length === 0) {
+      return res.status(404).json({ error: "Salon not found" });
+    }
+
+    if (salons[0].owner_id !== userId && req.user?.user_role !== 'admin') {
+      return res.status(403).json({ error: "Not authorized to update this salon" });
+    }
+
+    const { 
+      name,
+      address, 
+      phone, 
+      city, 
+      email, 
+      website, 
+      description 
+    } = req.body;
+
+    // Build update query dynamically based on provided fields
+    const updates = [];
+    const values = [];
+
+    if (name) {
+      updates.push("name = ?");
+      values.push(name);
+      // Update slug when name changes
+      const slug = name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '');
+      updates.push("slug = ?");
+      values.push(slug);
+    }
+    if (address !== undefined) { updates.push("address = ?"); values.push(address); }
+    if (city !== undefined) { updates.push("city = ?"); values.push(city); }
+    if (phone !== undefined) { updates.push("phone = ?"); values.push(phone); }
+    if (email !== undefined) { updates.push("email = ?"); values.push(email); }
+    if (website !== undefined) { updates.push("website = ?"); values.push(website); }
+    if (description !== undefined) { updates.push("description = ?"); values.push(description); }
+
+    // Handle profile picture if uploaded
+    if (req.files && req.files.length > 0) {
+      const file = req.files[0];
+      const profilePicturePath = `/uploads/${file.filename}`;
+      updates.push("profile_picture = ?");
+      values.push(profilePicturePath);
+    }
+
+    if (updates.length === 0) {
+      return res.status(400).json({ error: "No fields to update" });
+    }
+
+    values.push(salon_id);
+
+    await query(
+      `UPDATE salons SET ${updates.join(", ")} WHERE salon_id = ?`,
+      values
+    );
+
+    // Fetch updated salon
+    const updatedSalon = await query(
+      "SELECT salon_id, name, slug, address, city, phone, email, website, description, profile_picture, status FROM salons WHERE salon_id = ?",
+      [salon_id]
+    );
+
+    return res.json({
+      message: "Salon updated successfully",
+      salon: updatedSalon[0]
+    });
+  } catch (error) {
+    console.error("Error updating salon:", error);
+    res.status(500).json({ error: "Failed to update salon" });
   }
 };

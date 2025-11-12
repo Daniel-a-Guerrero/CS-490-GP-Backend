@@ -188,7 +188,7 @@ exports.checkOwnerSalon = async (req, res) => {
       return res.status(401).json({ error: "Not authenticated" });
     }
 
-    const [salons] = await db.query(
+    const salons = await query(
       "SELECT salon_id, name, slug, address, city, phone, email, profile_picture, status FROM salons WHERE owner_id = ? LIMIT 1",
       [userId]
     );

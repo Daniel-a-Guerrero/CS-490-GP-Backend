@@ -1,12 +1,143 @@
 const authService = require("./service");
 const userService = require("../users/service");
 const { db } = require("../../config/database");
+const jwt = require("jsonwebtoken");
+
+const salonColumnCache = {};
+
+const slugify = (input = "", suffix = "") => {
+  const base = input
+    .toString()
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "")
+    .slice(0, 48);
+  const normalizedSuffix = suffix ? `-${suffix}` : "";
+  return (base || "salon")
+    .concat(normalizedSuffix)
+    .replace(/-+/g, "-")
+    .replace(/^-+|-+$/g, "")
+    .slice(0, 64);
+};
+
+const hasSalonColumn = async (columnName) => {
+  if (salonColumnCache[columnName] !== undefined) {
+    return salonColumnCache[columnName];
+  }
+  try {
+    const [columns] = await db.query("SHOW COLUMNS FROM salons LIKE ?", [
+      columnName,
+    ]);
+    salonColumnCache[columnName] = Array.isArray(columns) && columns.length > 0;
+  } catch (err) {
+    console.warn(`Unable to inspect salons.${columnName}:`, err.message);
+    salonColumnCache[columnName] = false;
+  }
+  return salonColumnCache[columnName];
+};
+
+const createOwnerSalon = async (ownerId, payload = {}) => {
+  const safeName =
+    (payload.name && payload.name.trim()) ||
+    (payload.salon_name && payload.salon_name.trim()) ||
+    "New Salon";
+  const slug = slugify(safeName, ownerId);
+
+  const columns = ["owner_id"];
+  const placeholders = ["?"];
+  const values = [ownerId];
+
+  const addColumnIfSupported = async (column, value) => {
+    if (await hasSalonColumn(column)) {
+      columns.push(column);
+      placeholders.push("?");
+      values.push(value);
+    }
+  };
+
+  await addColumnIfSupported("name", safeName);
+  await addColumnIfSupported("salon_name", safeName);
+  await addColumnIfSupported("slug", slug);
+  await addColumnIfSupported("address", payload.address || null);
+  await addColumnIfSupported("city", payload.city || null);
+  await addColumnIfSupported("state", payload.state || payload.region || null);
+  await addColumnIfSupported("zip", payload.zip || payload.postal_code || null);
+  await addColumnIfSupported(
+    "postal_code",
+    payload.postal_code || payload.zip || null
+  );
+  await addColumnIfSupported("country", payload.country || null);
+  await addColumnIfSupported("phone", payload.phone || null);
+  await addColumnIfSupported("email", payload.email || null);
+  await addColumnIfSupported("website", payload.website || null);
+  await addColumnIfSupported("description", payload.description || null);
+  await addColumnIfSupported("profile_picture", payload.profile_picture || null);
+  await addColumnIfSupported("status", payload.status || "pending");
+
+  if (columns.length === 1) {
+    throw new Error("Unable to create salon record: no writable columns found");
+  }
+
+  const [result] = await db.query(
+    `INSERT INTO salons (${columns.join(", ")}) VALUES (${placeholders.join(
+      ", "
+    )})`,
+    values
+  );
+  return { salonId: result.insertId, slug };
+};
+
+const cleanupUserRecords = async (userId) => {
+  if (!userId) return;
+  try {
+    await db.query("DELETE FROM auth WHERE user_id = ?", [userId]);
+    await db.query("DELETE FROM users WHERE user_id = ?", [userId]);
+  } catch (err) {
+    console.error(
+      "Failed to clean up user after signup error:",
+      err.message || err
+    );
+  }
+};
+
+let computedSalonNameExpr = null;
+const getSalonNameExpression = async () => {
+  if (computedSalonNameExpr) return computedSalonNameExpr;
+
+  const hasNameColumn = await hasSalonColumn("name");
+  const hasLegacyColumn = await hasSalonColumn("salon_name");
+
+  if (hasNameColumn && hasLegacyColumn) {
+    computedSalonNameExpr = "COALESCE(s.name, s.salon_name)";
+  } else if (hasNameColumn) {
+    computedSalonNameExpr = "s.name";
+  } else if (hasLegacyColumn) {
+    computedSalonNameExpr = "s.salon_name";
+  } else {
+    computedSalonNameExpr = "'Salon'";
+  }
+
+  return computedSalonNameExpr;
+};
 
 // ==========================
 // MANUAL SIGNUP
 // ==========================
 exports.signupManual = async (req, res) => {
-  const { full_name, phone, email, password, role, businessName, businessAddress, businessWebsite } = req.body;
+  const {
+    full_name,
+    phone,
+    email,
+    password,
+    role,
+    businessName,
+    businessAddress,
+    businessCity,
+    businessState,
+    businessZip,
+    businessCountry,
+    businessWebsite,
+  } = req.body;
 
   if (!full_name || !phone || !email || !password) {
     return res.status(400).json({ error: "All fields are required" });
@@ -17,6 +148,16 @@ exports.signupManual = async (req, res) => {
       return res.status(409).json({ error: "Email already registered" });
 
     const userRole = role || "customer";
+    const ownerBusinessName =
+      req.body.business_name ||
+      businessName ||
+      req.body.salon_name ||
+      req.body.name ||
+      null;
+    const fallbackSalonName =
+      (ownerBusinessName && ownerBusinessName.trim()) ||
+      `${full_name.split(" ")[0] || "New"}'s Salon`;
+
     const userId = await userService.createUser(
       full_name,
       phone,
@@ -24,24 +165,42 @@ exports.signupManual = async (req, res) => {
       userRole
     );
 
-    await authService.createAuthRecord(userId, email, password);
-
-    // If user is owner, create salon record with business info
-    if (userRole === "owner" && businessName) {
-      // Generate slug from business name
-      const slug = businessName
-        .toLowerCase()
-        .replace(/[^a-z0-9]+/g, '-')
-        .replace(/^-+|-+$/g, '');
-      
-      await db.query(
-        `INSERT INTO salons (owner_id, name, slug, address, email, phone, website, status)
-         VALUES (?, ?, ?, ?, ?, ?, ?, 'pending')`,
-        [userId, businessName, slug, businessAddress || null, email, phone, businessWebsite || null]
-      );
+    try {
+      await authService.createAuthRecord(userId, email, password);
+    } catch (err) {
+      await cleanupUserRecords(userId);
+      throw err;
     }
 
-    res.status(201).json({ message: "User registered successfully" });
+    let salonId = null;
+    if (userRole === "owner") {
+      try {
+        const { salonId: insertedSalonId } = await createOwnerSalon(userId, {
+          name: fallbackSalonName,
+          address: businessAddress || null,
+          city: businessCity || req.body.city || null,
+          state: businessState || req.body.state || null,
+          zip: businessZip || req.body.zip || null,
+          country: businessCountry || req.body.country || null,
+          phone,
+          email,
+          website: businessWebsite || req.body.website || null,
+          description:
+            req.body.businessDescription || req.body.description || null,
+        });
+        salonId = insertedSalonId;
+      } catch (err) {
+        await cleanupUserRecords(userId);
+        throw err;
+      }
+    }
+
+    res.status(201).json({
+      message: "User registered successfully",
+      user_id: userId,
+      role: userRole,
+      salon_id: salonId,
+    });
   } catch (err) {
     console.error("Signup error:", err);
     res.status(500).json({ error: "Server error during signup" });
@@ -217,19 +376,20 @@ exports.setRole = async (req, res) => {
 // ==========================
 exports.getCurrentUser = async (req, res) => {
   try {
-    if (req.firebaseUser) {
-      const email = req.firebaseUser.email;
-      const [rows] = await db.query(
-        `SELECT 
+    const salonNameExpr = await getSalonNameExpression();
+    const baseSelect = `
+        SELECT 
            u.*, 
            s.salon_id, 
            s.slug AS salon_slug, 
-           s.name AS salon_name
+           ${salonNameExpr} AS salon_name
          FROM users u
          LEFT JOIN salons s ON s.owner_id = u.user_id
-         WHERE u.email = ?`,
-        [email]
-      );
+    `;
+
+    if (req.firebaseUser) {
+      const email = req.firebaseUser.email;
+      const [rows] = await db.query(`${baseSelect} WHERE u.email = ?`, [email]);
 
       if (!rows.length)
         return res.status(404).json({ error: "User not found" });
@@ -241,14 +401,7 @@ exports.getCurrentUser = async (req, res) => {
       });
     } else if (req.user) {
       const [rows] = await db.query(
-        `SELECT 
-           u.*, 
-           s.salon_id, 
-           s.slug AS salon_slug, 
-           s.name AS salon_name
-         FROM users u
-         LEFT JOIN salons s ON s.owner_id = u.user_id
-         WHERE u.user_id = ? OR u.email = ?`,
+        `${baseSelect} WHERE u.user_id = ? OR u.email = ?`,
         [req.user.user_id, req.user.email]
       );
 
@@ -365,7 +518,6 @@ exports.verify2FA = async (req, res) => {
     }
 
     // Verify the temporary token
-    const jwt = require("jsonwebtoken");
     let decoded;
     try {
       decoded = jwt.verify(tempToken, process.env.JWT_SECRET);

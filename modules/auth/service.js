@@ -3,6 +3,8 @@ const jwt = require("jsonwebtoken");
 const { db } = require("../../config/database");
 const admin = require("../../config/firebaseAdmin");
 const { sendEmail } = require("../../services/email");
+const clickSendService = require("../../services/clicksendService");
+const smsService = require("../../services/smsService");
 
 // =====================
 // MANUAL AUTH HELPERS
@@ -168,11 +170,13 @@ async function sendSMSCode(userId, phoneNumber, userName) {
       [userId, code, "sms", expiresAt]
     );
 
-    // Use ClickSend only
-    const clickSendService = require("../../services/clicksendService");
-    const result = await clickSendService.send2FACode(phoneNumber, code);
-    if (!result?.success) {
-      throw new Error(result?.error || "SMS service unavailable");
+    // Try Twilio first, then fall back to ClickSend
+    let smsResult = await smsService.send2FACode(phoneNumber, code, userName);
+    if (!smsResult?.success) {
+      smsResult = await clickSendService.send2FACode(phoneNumber, code);
+    }
+    if (!smsResult?.success) {
+      throw new Error(smsResult?.error || "SMS service unavailable");
     }
 
     return { success: true };

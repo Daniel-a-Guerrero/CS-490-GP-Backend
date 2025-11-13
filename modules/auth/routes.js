@@ -84,6 +84,10 @@ router.post("/set-role", async (req, res) => {
       role,
       businessName,
       businessAddress,
+      businessCity,
+      businessState,
+      businessZip,
+      businessCountry,
       businessEmail,
       businessPhone,
       businessWebsite,
@@ -113,9 +117,21 @@ router.post("/set-role", async (req, res) => {
         .replace(/^-+|-+$/g, '');
       
       await db.query(
-        `INSERT INTO salons (owner_id, name, slug, address, email, phone, website, status)
-         VALUES (?, ?, ?, ?, ?, ?, ?, 'pending')`,
-        [userId, businessName, slug, businessAddress || null, businessEmail || null, businessPhone || null, businessWebsite || null]
+        `INSERT INTO salons (owner_id, name, slug, address, city, state, zip, country, email, phone, website, status)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending')`,
+        [
+          userId,
+          businessName,
+          slug,
+          businessAddress || null,
+          businessCity || null,
+          businessState || null,
+          businessZip || null,
+          businessCountry || null,
+          businessEmail || null,
+          businessPhone || null,
+          businessWebsite || null,
+        ]
       );
     }
 

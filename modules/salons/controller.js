@@ -217,7 +217,7 @@ exports.checkOwnerSalon = async (req, res) => {
     }
 
     const salons = await query(
-      "SELECT salon_id, name, slug, address, city, phone, email, website, description, profile_picture, status FROM salons WHERE owner_id = ? LIMIT 1",
+      "SELECT salon_id, name, slug, address, city, state, zip, country, phone, email, website, description, profile_picture, status FROM salons WHERE owner_id = ? LIMIT 1",
       [userId]
     );
 
@@ -230,6 +230,9 @@ exports.checkOwnerSalon = async (req, res) => {
           slug: salons[0].slug,
           address: salons[0].address,
           city: salons[0].city,
+          state: salons[0].state,
+          zip: salons[0].zip,
+          country: salons[0].country,
           phone: salons[0].phone,
           email: salons[0].email,
           website: salons[0].website,
@@ -275,6 +278,9 @@ exports.createSalon = async (req, res) => {
       address, 
       phone, 
       city, 
+      state,
+      zip,
+      country,
       email, 
       website, 
       description 
@@ -306,9 +312,23 @@ exports.createSalon = async (req, res) => {
     // Insert the new salon
     const result = await query(
       `INSERT INTO salons 
-       (owner_id, name, slug, address, city, phone, email, website, description, profile_picture, status) 
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending')`,
-      [userId, salonName, slug, address, city || null, phone, email || null, website || null, description || null, profilePicturePath]
+       (owner_id, name, slug, address, city, state, zip, country, phone, email, website, description, profile_picture, status) 
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending')`,
+      [
+        userId,
+        salonName,
+        slug,
+        address,
+        city || null,
+        state || null,
+        zip || null,
+        country || null,
+        phone,
+        email || null,
+        website || null,
+        description || null,
+        profilePicturePath,
+      ]
     );
 
     return res.status(201).json({
@@ -319,6 +339,9 @@ exports.createSalon = async (req, res) => {
         slug,
         address,
         city,
+        state,
+        zip,
+        country,
         phone,
         email,
         website,
@@ -340,7 +363,7 @@ exports.getSalonById = async (req, res) => {
     const userId = req.user?.user_id;
 
     const salons = await query(
-      "SELECT s.salon_id, s.name, s.slug, s.address, s.city, s.phone, s.email, s.website, s.description, s.profile_picture, s.status, s.created_at, s.owner_id FROM salons s WHERE s.salon_id = ?",
+      "SELECT s.salon_id, s.name, s.slug, s.address, s.city, s.state, s.zip, s.country, s.phone, s.email, s.website, s.description, s.profile_picture, s.status, s.created_at, s.owner_id FROM salons s WHERE s.salon_id = ?",
       [salon_id]
     );
 
@@ -406,6 +429,9 @@ exports.updateSalon = async (req, res) => {
     }
     if (address !== undefined) { updates.push("address = ?"); values.push(address); }
     if (city !== undefined) { updates.push("city = ?"); values.push(city); }
+    if (state !== undefined) { updates.push("state = ?"); values.push(state); }
+    if (zip !== undefined) { updates.push("zip = ?"); values.push(zip); }
+    if (country !== undefined) { updates.push("country = ?"); values.push(country); }
     if (phone !== undefined) { updates.push("phone = ?"); values.push(phone); }
     if (email !== undefined) { updates.push("email = ?"); values.push(email); }
     if (website !== undefined) { updates.push("website = ?"); values.push(website); }
@@ -432,7 +458,7 @@ exports.updateSalon = async (req, res) => {
 
     // Fetch updated salon
     const updatedSalon = await query(
-      "SELECT salon_id, name, slug, address, city, phone, email, website, description, profile_picture, status FROM salons WHERE salon_id = ?",
+      "SELECT salon_id, name, slug, address, city, state, zip, country, phone, email, website, description, profile_picture, status FROM salons WHERE salon_id = ?",
       [salon_id]
     );
 

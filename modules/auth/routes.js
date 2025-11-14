@@ -150,13 +150,17 @@ router.post("/set-role", async (req, res) => {
 
 // Middleware that handles both JWT and Firebase authentication
 const flexibleAuth = async (req, res, next) => {
+  const cookieToken = req.cookies?.token;
   const authHeader = req.headers.authorization || "";
+  const headerToken = authHeader.startsWith("Bearer ")
+    ? authHeader.split(" ")[1]
+    : null;
 
-  if (!authHeader || !authHeader.startsWith("Bearer ")) {
+  const token = cookieToken || headerToken;
+
+  if (!token) {
     return res.status(401).json({ error: "Missing or invalid token" });
   }
-
-  const token = authHeader.split("Bearer ")[1];
 
   try {
     // Try Firebase authentication first

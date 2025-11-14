@@ -15,17 +15,34 @@ const photoRoutes = require("./modules/photos/routes");
 const { db, testConnection } = require("./config/database");
 
 const app = express();
+const allowedOrigins = [
+  process.env.FRONTEND_URL,
+  "http://localhost:3000",
+  "http://127.0.0.1:3000",
+];
 
 // Serve uploaded files statically
-app.use('/uploads', express.static('public/uploads'));
+app.use("/uploads", express.static("public/uploads"));
 
 app.use(helmet());
+
 app.use(
   cors({
-    origin: true,
+    origin: (origin, callback) => {
+      // Allow server-to-server, Postman, curl (no origin)
+      if (!origin) return callback(null, true);
+
+      if (allowedOrigins.includes(origin)) {
+        return callback(null, true);
+      }
+
+      console.log("CORS blocked:", origin);
+      return callback(new Error("Not allowed by CORS"));
+    },
     credentials: true,
   })
 );
+
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 app.use(morgan("dev"));

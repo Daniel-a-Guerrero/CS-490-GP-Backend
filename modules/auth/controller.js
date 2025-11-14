@@ -9,8 +9,8 @@ const buildAuthCookieOptions = (maxAgeMs) => {
   const isProduction = process.env.NODE_ENV === "production";
   const options = {
     httpOnly: true,
-    secure: true,
-    sameSite: "none",
+    secure: isProduction,
+    sameSite: isProduction ? "none" : "lax",
     path: "/",
   };
 
@@ -20,7 +20,9 @@ const buildAuthCookieOptions = (maxAgeMs) => {
 
   if (isProduction) {
     options.domain =
-      process.env.AUTH_COOKIE_DOMAIN || process.env.COOKIE_DOMAIN || ".webershub.com";
+      process.env.AUTH_COOKIE_DOMAIN ||
+      process.env.COOKIE_DOMAIN ||
+      ".webershub.com";
   }
 
   return options;

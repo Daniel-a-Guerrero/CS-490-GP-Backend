@@ -1,0 +1,25 @@
+name: Deploy Backend to EC2
+
+on:
+  push:
+    branches:
+      - main
+
+jobs:
+  deploy:
+    runs-on: self-hosted
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v3
+
+      - name: Install Node dependencies
+        run: |
+          cd /home/ubuntu/CS-490-GP-Backend
+          npm install
+
+      - name: Restart PM2 (run app.js in production)
+        run: |
+          pm2 stop backend || true
+          pm2 start app.js --name backend
+          pm2 save

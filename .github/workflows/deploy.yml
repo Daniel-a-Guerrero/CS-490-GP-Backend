@@ -15,7 +15,7 @@ jobs:
 
       - name: Sync code to EC2 production folder
         run: |
-          rsync -av --delete ${{ github.workspace }}/ /home/ubuntu/CS-490-GP-Backend/
+          rsync -av --delete --exclude='.env' ${{ github.workspace }}/ /home/ubuntu/CS-490-GP-Backend/
 
       - name: Install Node dependencies
         run: |

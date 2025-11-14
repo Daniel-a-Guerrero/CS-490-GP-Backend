@@ -5,6 +5,27 @@ const jwt = require("jsonwebtoken");
 
 const salonColumnCache = {};
 
+const buildAuthCookieOptions = (maxAgeMs) => {
+  const isProduction = process.env.NODE_ENV === "production";
+  const options = {
+    httpOnly: true,
+    secure: true,
+    sameSite: "none",
+    path: "/",
+  };
+
+  if (typeof maxAgeMs === "number") {
+    options.maxAge = maxAgeMs;
+  }
+
+  if (isProduction) {
+    options.domain =
+      process.env.AUTH_COOKIE_DOMAIN || process.env.COOKIE_DOMAIN || ".webershub.com";
+  }
+
+  return options;
+};
+
 const slugify = (input = "", suffix = "") => {
   const base = input
     .toString()
@@ -283,13 +304,7 @@ exports.loginManual = async (req, res) => {
     });
 
     // Set secure HTTP-only cookie for middleware + persistence
-    res.cookie("token", token, {
-      httpOnly: true,
-      secure: process.env.NODE_ENV === "production", // HTTPS only in production
-      sameSite: "lax",
-      maxAge: 60 * 60 * 1000, // 1 hour
-      path: "/", // cookie valid on all routes
-    });
+    res.cookie("token", token, buildAuthCookieOptions(60 * 60 * 1000));
 
     // ✅ Also return JSON body (frontend may still use token locally)
     res.json({
@@ -556,13 +571,7 @@ exports.verify2FA = async (req, res) => {
       [userId]
     );
 
-    res.cookie("token", finalToken, {
-      httpOnly: true,
-      secure: process.env.NODE_ENV === "production",
-      sameSite: "lax",
-      maxAge: 60 * 60 * 1000,
-      path: "/",
-    });
+    res.cookie("token", finalToken, buildAuthCookieOptions(60 * 60 * 1000));
 
     res.status(200).json({
       message: "2FA verification successful",
@@ -593,12 +602,7 @@ exports.refreshToken = async (req, res) => {
       { expiresIn: "1h" }
     );
 
-    res.cookie("token", newToken, {
-      httpOnly: true,
-      secure: process.env.NODE_ENV === "production",
-      sameSite: "lax",
-      maxAge: 3600 * 1000, // 1 hour
-    });
+    res.cookie("token", newToken, buildAuthCookieOptions(3600 * 1000));
 
     return res.json({ message: "Token refreshed", token: newToken });
   } catch (err) {

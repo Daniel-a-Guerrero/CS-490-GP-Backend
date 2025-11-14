@@ -217,28 +217,38 @@ exports.checkOwnerSalon = async (req, res) => {
     }
 
     const salons = await query(
-      "SELECT salon_id, name, slug, address, city, state, zip, country, phone, email, website, description, profile_picture, status FROM salons WHERE owner_id = ? LIMIT 1",
+      "SELECT * FROM salons WHERE owner_id = ? LIMIT 1",
       [userId]
     );
 
     if (salons && salons.length > 0) {
+      const record = salons[0];
+      const pickField = (...fields) => {
+        for (const field of fields) {
+          if (record[field] !== undefined && record[field] !== null) {
+            return record[field];
+          }
+        }
+        return null;
+      };
+
       return res.json({
         hasSalon: true,
         salon: {
-          salon_id: salons[0].salon_id,
-          name: salons[0].name,
-          slug: salons[0].slug,
-          address: salons[0].address,
-          city: salons[0].city,
-          state: salons[0].state,
-          zip: salons[0].zip,
-          country: salons[0].country,
-          phone: salons[0].phone,
-          email: salons[0].email,
-          website: salons[0].website,
-          description: salons[0].description,
-          profile_picture: salons[0].profile_picture,
-          status: salons[0].status,
+          salon_id: record.salon_id,
+          name: pickField("name", "salon_name"),
+          slug: pickField("slug", "salon_slug"),
+          address: pickField("address", "street_address"),
+          city: record.city ?? null,
+          state: pickField("state", "region"),
+          zip: pickField("zip", "postal_code"),
+          country: record.country ?? null,
+          phone: pickField("phone", "contact_number"),
+          email: pickField("email", "contact_email"),
+          website: record.website ?? null,
+          description: pickField("description", "about"),
+          profile_picture: pickField("profile_picture", "logo"),
+          status: pickField("status", "salon_status"),
         },
       });
     }

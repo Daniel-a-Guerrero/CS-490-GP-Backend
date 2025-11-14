@@ -12,14 +12,21 @@ jobs:
     steps:
       - name: Checkout repository
         uses: actions/checkout@v3
+        with:
+          path: repo # prevent mixing with your real backend folder
+
+      - name: Copy new code into production folder
+        run: |
+          rm -rf /home/ubuntu/CS-490-GP-Backend/*
+          cp -r repo/* /home/ubuntu/CS-490-GP-Backend/
 
       - name: Install Node dependencies
         run: |
           cd /home/ubuntu/CS-490-GP-Backend
           npm install
 
-      - name: Restart PM2 (run app.js in production)
+      - name: Restart PM2 (stygo-backend)
         run: |
-          pm2 stop backend || true
-          pm2 start app.js --name backend
+          pm2 stop stygo-backend || true
+          pm2 start /home/ubuntu/CS-490-GP-Backend/app.js --name stygo-backend
           pm2 save

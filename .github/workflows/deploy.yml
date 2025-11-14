@@ -12,13 +12,10 @@ jobs:
     steps:
       - name: Checkout repository
         uses: actions/checkout@v3
-        with:
-          path: repo # prevent mixing with your real backend folder
 
-      - name: Copy new code into production folder
+      - name: Sync code to EC2 production folder
         run: |
-          rm -rf /home/ubuntu/CS-490-GP-Backend/*
-          cp -r repo/* /home/ubuntu/CS-490-GP-Backend/
+          rsync -av --delete ${{ github.workspace }}/ /home/ubuntu/CS-490-GP-Backend/
 
       - name: Install Node dependencies
         run: |

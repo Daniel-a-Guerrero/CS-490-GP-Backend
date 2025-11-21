@@ -140,7 +140,7 @@ exports.addStaff = async (req, res) => {
     await staffService.savePinSetupToken(insertId, token);
 
     // Step 4: Build URLs
-    const frontendBase = process.env.NEXT_PUBLIC_APP_URL || "https://stygo.app";
+    const frontendBase = process.env.NEXT_PUBLIC_APP_URL;
     const setupLink = `${frontendBase}/salon/${salon_slug}/staff/sign-in-code?token=${token}`;
     const loginLink = `${frontendBase}/salon/${salon_slug}/staff/login`;
 

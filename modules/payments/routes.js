@@ -2,14 +2,16 @@
 const express = require("express");
 const router = express.Router();
 const paymentController = require("./controller");
-const { verifyCustomJwt } = require("../../middleware/verifyCustomJwt");
+const webhookController = require("./webhooks");
+const { verifyAnyToken } = require("../../middleware/verifyAnyTokens");
 
-router.post("/pay", verifyCustomJwt, paymentController.processPayment);
-router.get(
-  "/salon/:salon_id",
-  verifyCustomJwt,
-  paymentController.getPaymentsForSalon
-);
+// Create checkout and send payment email (authenticated)
+router.post("/checkout", verifyAnyToken, paymentController.createCheckout);
+
+// Get salon payments (authenticated)
+router.get("/salon/:salon_id", verifyAnyToken, paymentController.getPaymentsForSalon);
+
+// Stripe webhook (no auth, raw body handled in app.js)
+router.post("/webhook", webhookController.handleWebhook);
 
 module.exports = router;
-

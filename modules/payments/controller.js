@@ -1,28 +1,43 @@
 //payments/controller.js
 const paymentService = require("./service");
 
-exports.processPayment = async (req, res) => {
+/**
+ * Create checkout session and send payment email
+ */
+exports.createCheckout = async (req, res) => {
   try {
-    const { amount, payment_method, appointment_id } = req.body;
-    // Try different ways to get user_id from token
+    const { amount, appointment_id } = req.body;
     const user_id = req.user.user_id || req.user.id || req.user.userId;
 
     if (!user_id) {
-      console.error("User ID not found in token. Token payload:", req.user);
       return res.status(400).json({ error: "User ID not found in token" });
     }
 
-    const payment_id = await paymentService.processPayment(user_id, amount, payment_method, appointment_id);
-    if (!payment_id) {
-      return res.status(404).json({ error: "Not found" });
+    if (!amount || !appointment_id) {
+      return res.status(400).json({ error: "Amount and appointment_id required" });
     }
-    res.json({ message: "Payment processed", payment_id });
+
+    const result = await paymentService.createCheckoutAndNotify(
+      user_id,
+      parseFloat(amount),
+      appointment_id
+    );
+
+    res.json({
+      success: true,
+      message: "Payment link sent to your email",
+      payment_id: result.payment_id,
+      payment_link: result.payment_link,
+    });
   } catch (err) {
-    console.error("Payment error:", err);
+    console.error("Checkout error:", err);
     res.status(500).json({ error: err.message });
   }
 };
 
+/**
+ * Get payments for a salon
+ */
 exports.getPaymentsForSalon = async (req, res) => {
   try {
     const { salon_id } = req.params;
@@ -33,4 +48,3 @@ exports.getPaymentsForSalon = async (req, res) => {
     res.status(500).json({ error: err.message });
   }
 };
-

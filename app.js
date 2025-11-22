@@ -12,6 +12,8 @@ const appointmentRoutes = require("./modules/appointments/routes");
 const analyticsRoutes = require("./modules/analytics/routes");
 const salonRoutes = require("./modules/salons/routes");
 const photoRoutes = require("./modules/photos/routes");
+const paymentRoutes = require("./modules/payments/routes");
+const webhookController = require("./modules/payments/webhooks");
 const { db, testConnection } = require("./config/database");
 
 const app = express();
@@ -25,6 +27,9 @@ const allowedOrigins = [
 app.use("/uploads", express.static("public/uploads"));
 
 app.use(helmet());
+
+// Stripe webhook needs raw body - must be BEFORE express.json()
+app.use("/api/payments/webhook", express.raw({ type: "application/json" }), webhookController.handleWebhook);
 
 app.use(
   cors({
@@ -59,6 +64,7 @@ app.use("/api/users", userRoutes);
 app.use("/api/appointments", appointmentRoutes);
 app.use("/api/analytics", analyticsRoutes);
 app.use("/api/photos", photoRoutes);
+app.use("/api/payments", paymentRoutes);
 
 app.use((req, res) => {
   res.status(404).json({ error: "Not found" });

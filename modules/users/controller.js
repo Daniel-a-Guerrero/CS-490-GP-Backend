@@ -121,13 +121,12 @@ const getSalonCustomerStats = async (req, res) => {
       [salonId]
     );
 
-    const stats =
-      rows[0] || {
-        total_customers: 0,
-        vip_customers: 0,
-        total_revenue: 0,
-        avg_spend: 0,
-      };
+    const stats = rows[0] || {
+      total_customers: 0,
+      vip_customers: 0,
+      total_revenue: 0,
+      avg_spend: 0,
+    };
 
     res.json({ stats });
   } catch (error) {
@@ -224,16 +223,8 @@ const getSalonCustomerDirectory = async (req, res) => {
 const addSalonCustomer = async (req, res) => {
   try {
     const salonId = Number(req.body.salon_id || req.user?.salon_id);
-    const {
-      full_name,
-      email,
-      phone,
-      address,
-      city,
-      state,
-      zip,
-      notes,
-    } = req.body;
+    const { full_name, email, phone, address, city, state, zip, notes } =
+      req.body;
 
     if (!salonId || !full_name || !email) {
       return res
@@ -254,7 +245,12 @@ const addSalonCustomer = async (req, res) => {
         [full_name, phone || null, userId]
       );
     } else {
-      userId = await userService.createUser(full_name, phone, email, "customer");
+      userId = await userService.createUser(
+        full_name,
+        phone,
+        email,
+        "customer"
+      );
     }
 
     await db.query(
@@ -268,10 +264,19 @@ const addSalonCustomer = async (req, res) => {
         zip = VALUES(zip),
         notes = VALUES(notes);
       `,
-      [salonId, userId, address || null, city || null, state || null, zip || null, notes || null]
+      [
+        salonId,
+        userId,
+        address || null,
+        city || null,
+        state || null,
+        zip || null,
+        notes || null,
+      ]
     );
 
-    const frontendBase = process.env.NEXT_PUBLIC_APP_URL || "https://stygo.app";
+    const frontendBase =
+      process.env.FRONTEND_URL || "https://main.d9mc2v9b3gxgw.amplifyapp.com";
     const portalLink = `${frontendBase}/sign-in`;
     const emailHtml = `
       <h2>Welcome to StyGo!</h2>
@@ -316,19 +321,13 @@ const updateSalonCustomer = async (req, res) => {
       [salonId, userId]
     );
     if (!existing.length) {
-      return res.status(404).json({ error: "Customer not found for this salon" });
+      return res
+        .status(404)
+        .json({ error: "Customer not found for this salon" });
     }
 
-    const {
-      full_name,
-      email,
-      phone,
-      address,
-      city,
-      state,
-      zip,
-      notes,
-    } = req.body;
+    const { full_name, email, phone, address, city, state, zip, notes } =
+      req.body;
 
     if (full_name || phone || email) {
       await db.query(
@@ -356,7 +355,15 @@ const updateSalonCustomer = async (req, res) => {
         notes = COALESCE(?, notes)
       WHERE salon_id = ? AND user_id = ?
       `,
-      [address || null, city || null, state || null, zip || null, notes || null, salonId, userId]
+      [
+        address || null,
+        city || null,
+        state || null,
+        zip || null,
+        notes || null,
+        salonId,
+        userId,
+      ]
     );
 
     res.json({ message: "Customer updated successfully" });
@@ -379,7 +386,9 @@ const deleteSalonCustomer = async (req, res) => {
       [salonId, userId]
     );
     if (result.affectedRows === 0) {
-      return res.status(404).json({ error: "Customer not found for this salon" });
+      return res
+        .status(404)
+        .json({ error: "Customer not found for this salon" });
     }
 
     res.json({ message: "Customer removed from salon" });

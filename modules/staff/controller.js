@@ -140,7 +140,8 @@ exports.addStaff = async (req, res) => {
     await staffService.savePinSetupToken(insertId, token);
 
     // Step 4: Build URLs
-    const frontendBase = process.env.NEXT_PUBLIC_APP_URL || "https://stygo.app";
+    const frontendBase =
+      process.env.FRONTEND_URL || "https://main.d9mc2v9b3gxgw.amplifyapp.com";
     const setupLink = `${frontendBase}/salon/${salon_slug}/staff/sign-in-code?token=${token}`;
     const loginLink = `${frontendBase}/salon/${salon_slug}/staff/login`;
 
@@ -164,7 +165,9 @@ exports.addStaff = async (req, res) => {
     // Send email in background (don't wait for it)
     sendEmail(email, "Set Up Your StyGo Staff PIN", emailHtml)
       .then(() => console.log("✅ Onboarding email sent successfully"))
-      .catch((emailErr) => console.log("⚠️ Email sending failed:", emailErr.message));
+      .catch((emailErr) =>
+        console.log("⚠️ Email sending failed:", emailErr.message)
+      );
 
     // Return immediately without waiting for email
     return res.status(201).json({

@@ -1,6 +1,10 @@
 const userService = require("./service");
 const { db } = require("../../config/database");
 const { sendEmail } = require("../../services/email");
+const {
+  buildPasswordSetupLink,
+  buildSignInLink,
+} = require("../../services/customerPortalLinks");
 
 const createUser = async (req, res) => {
   try {
@@ -238,6 +242,8 @@ const addSalonCustomer = async (req, res) => {
       [email]
     );
 
+    const isNewCustomer = existing.length === 0;
+
     if (existing.length) {
       userId = existing[0].user_id;
       await db.query(
@@ -275,18 +281,33 @@ const addSalonCustomer = async (req, res) => {
       ]
     );
 
-    const frontendBase =
-      process.env.FRONTEND_URL || "https://main.d9mc2v9b3gxgw.amplifyapp.com";
-    const portalLink = `${frontendBase}/sign-in`;
+    const signInLink = buildSignInLink();
+    const passwordSetupLink = isNewCustomer
+      ? buildPasswordSetupLink(userId, email)
+      : null;
+    const firstName = (full_name || "there").split(" ")[0];
     const emailHtml = `
       <h2>Welcome to StyGo!</h2>
-      <p>Hi ${full_name.split(" ")[0]},</p>
+      <p>Hi ${firstName},</p>
       <p>You've been added as a customer at our salon. You can book or review your upcoming appointments any time.</p>
+      ${
+        isNewCustomer
+          ? `
       <p>
-        <a href="${portalLink}" style="display:inline-block;padding:10px 20px;background:#10b981;color:white;border-radius:6px;text-decoration:none;">
+        <a href="${passwordSetupLink?.url}" style="display:inline-block;padding:10px 20px;background:#10b981;color:white;border-radius:6px;text-decoration:none;">
+          Set Your Portal Password
+        </a>
+      </p>
+      <p>Already set it up? You can sign in here: <a href="${signInLink}">${signInLink}</a></p>
+      `
+          : `
+      <p>
+        <a href="${signInLink}" style="display:inline-block;padding:10px 20px;background:#10b981;color:white;border-radius:6px;text-decoration:none;">
           Visit StyGo Portal
         </a>
       </p>
+      `
+      }
       <p>If you already have an appointment scheduled, you will receive separate confirmations with all the details.</p>
       <br/>
       <p>Thanks,<br/>The StyGo Team</p>

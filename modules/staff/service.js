@@ -92,14 +92,15 @@ exports.staffEfficiency = async (id, salon_id) => {
        ROUND(
          COALESCE(SUM(svc.duration),0) / NULLIF(COALESCE(SUM(TIMESTAMPDIFF(MINUTE, sa.start_time, sa.end_time)),0),0) * 100,
          2
-       ) AS efficiency_percentage
-     FROM staff s
-     JOIN users u ON s.user_id = u.user_id
-     LEFT JOIN staff_availability sa ON s.staff_id = sa.staff_id
-     LEFT JOIN appointments a ON s.staff_id = a.staff_id AND a.status = 'completed'
-     LEFT JOIN services svc ON a.service_id = svc.service_id
-     WHERE s.staff_id = ? AND s.salon_id = ?
-     GROUP BY s.staff_id`,
+     ) AS efficiency_percentage
+    FROM staff s
+    JOIN users u ON s.user_id = u.user_id
+    LEFT JOIN staff_availability sa ON s.staff_id = sa.staff_id
+    LEFT JOIN appointments a ON s.staff_id = a.staff_id AND a.status = 'completed'
+    LEFT JOIN appointment_services aps ON a.appointment_id = aps.appointment_id
+    LEFT JOIN services svc ON aps.service_id = svc.service_id
+    WHERE s.staff_id = ? AND s.salon_id = ?
+    GROUP BY s.staff_id`,
     [id, salon_id]
   );
   if (!rows.length) {
@@ -136,7 +137,8 @@ exports.averageEfficiency = async (salon_id) => {
               COALESCE(SUM(TIMESTAMPDIFF(MINUTE, sa.checkin_time, sa.checkout_time)),0) AS total_work_minutes
         FROM staff s
         LEFT JOIN appointments a ON a.staff_id = s.staff_id AND a.status = 'completed'
-        LEFT JOIN services svc ON a.service_id = svc.service_id AND MONTH(a.scheduled_time)=? AND YEAR(a.scheduled_time)=?
+        LEFT JOIN appointment_services aps ON a.appointment_id = aps.appointment_id AND MONTH(a.scheduled_time)=? AND YEAR(a.scheduled_time)=?
+        LEFT JOIN services svc ON aps.service_id = svc.service_id
         LEFT JOIN staff_attendance sa ON sa.staff_id = s.staff_id AND MONTH(sa.checkin_time)=? AND YEAR(sa.checkin_time)=?
         WHERE s.salon_id = ?
         GROUP BY s.staff_id

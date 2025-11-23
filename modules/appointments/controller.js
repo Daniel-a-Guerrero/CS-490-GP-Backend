@@ -1,6 +1,11 @@
 const { query, db } = require("../../config/database");
 const appointmentService = require("./service");
 const { sendEmail } = require("../../services/email");
+const {
+  buildAppointmentLink,
+  buildPasswordSetupLink,
+  buildSignInLink,
+} = require("../../services/customerPortalLinks");
 
 /**
  * Create Appointment
@@ -54,6 +59,8 @@ exports.createAppointment = async (req, res) => {
 
     let userId;
     let customerFullName;
+
+    const isNewCustomer = existingCustomer.length === 0;
 
     if (existingCustomer.length) {
       userId = existingCustomer[0].user_id;
@@ -158,6 +165,14 @@ exports.createAppointment = async (req, res) => {
       serviceSummary = serviceInfo?.custom_name || "Selected Service";
     }
 
+    const appointmentLink = buildAppointmentLink(appointmentId);
+    const signInLink = buildSignInLink();
+    const passwordSetupLink = isNewCustomer
+      ? buildPasswordSetupLink(userId, email)
+      : null;
+
+    const priceValue = Number(price || 0).toFixed(2);
+
     const emailHtml = `
       <h2>Appointment Confirmed</h2>
       <p>Dear ${firstName || customerFullName || "Customer"},</p>
@@ -165,11 +180,36 @@ exports.createAppointment = async (req, res) => {
         salonInfo?.salon_name || "our salon"
       }</b> is confirmed.</p>
       <ul>
-        <li><b>Services:</b> ${serviceSummary}</li>
+        <li><b>Services:</b> ${serviceSummary || "Selected Services"}</li>
         <li><b>Time:</b> ${new Date(scheduledTime).toLocaleString()}</li>
-        <li><b>Total Price:</b> $${Number(price).toFixed(2)}</li>
+        <li><b>Total Price:</b> $${priceValue}</li>
       </ul>
       <p><b>Salon Address:</b> ${salonInfo?.address || "N/A"}</p>
+      <p>
+        <a href="${appointmentLink}" style="display:inline-block;padding:10px 18px;background:#0ea5e9;color:white;border-radius:6px;text-decoration:none;">
+          View Appointment
+        </a>
+      </p>
+      ${
+        isNewCustomer
+          ? `
+      <p>New here? Set your portal password to manage this appointment:</p>
+      <p>
+        <a href="${passwordSetupLink?.url}" style="display:inline-block;padding:10px 18px;background:#10b981;color:white;border-radius:6px;text-decoration:none;">
+          Set Your Password
+        </a>
+      </p>
+      <p>Once set, you can log in anytime: <a href="${signInLink}">${signInLink}</a></p>
+      `
+          : `
+      <p>Manage this appointment anytime from your portal:</p>
+      <p>
+        <a href="${signInLink}" style="display:inline-block;padding:10px 18px;background:#10b981;color:white;border-radius:6px;text-decoration:none;">
+          Go to Portal
+        </a>
+      </p>
+      `
+      }
       <p>We look forward to seeing you!</p>
     `;
 

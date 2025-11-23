@@ -13,6 +13,8 @@ const appointmentRoutes = require("./modules/appointments/routes");
 const analyticsRoutes = require("./modules/analytics/routes");
 const salonRoutes = require("./modules/salons/routes");
 const photoRoutes = require("./modules/photos/routes");
+const notificationRoutes = require("./modules/notifications/routes");
+const historyRoutes = require("./modules/history/routes");
 const { db, testConnection } = require("./config/database");
 
 const app = express();
@@ -61,6 +63,8 @@ app.use("/api/users", userRoutes);
 app.use("/api/appointments", appointmentRoutes);
 app.use("/api/analytics", analyticsRoutes);
 app.use("/api/photos", photoRoutes);
+app.use("/api/notifications", notificationRoutes);
+app.use("/api/history", historyRoutes);
 
 app.use((req, res) => {
   res.status(404).json({ error: "Not found" });

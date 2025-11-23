@@ -327,6 +327,88 @@ exports.loginManual = async (req, res) => {
 };
 
 // ==========================
+// CUSTOMER PASSWORD SETUP (TOKEN-BASED)
+// ==========================
+exports.setCustomerPasswordFromToken = async (req, res) => {
+  try {
+    const { token, password } = req.body;
+    if (!token || !password) {
+      return res
+        .status(400)
+        .json({ error: "Token and new password are required" });
+    }
+
+    if (password.length < 8) {
+      return res
+        .status(400)
+        .json({ error: "Password must be at least 8 characters long" });
+    }
+
+    let decoded;
+    try {
+      decoded = jwt.verify(token, process.env.JWT_SECRET);
+    } catch (err) {
+      const message =
+        err.name === "TokenExpiredError"
+          ? "Password setup link has expired"
+          : "Invalid password setup link";
+      return res.status(401).json({ error: message });
+    }
+
+    if (decoded.purpose !== "customer_portal_setup") {
+      return res.status(400).json({ error: "Invalid password setup token" });
+    }
+
+    const { user_id: userId, email } = decoded;
+    const [users] = await db.query(
+      "SELECT user_id, email, user_role, full_name FROM users WHERE user_id = ? OR email = ? LIMIT 1",
+      [userId, email]
+    );
+
+    if (!users.length) {
+      return res.status(404).json({ error: "User not found" });
+    }
+
+    const user = users[0];
+
+    const [authRows] = await db.query(
+      "SELECT password_hash FROM auth WHERE user_id = ? OR email = ? LIMIT 1",
+      [user.user_id, user.email]
+    );
+
+    if (authRows.length && authRows[0].password_hash) {
+      return res
+        .status(409)
+        .json({ error: "Password already set. Please sign in instead." });
+    }
+
+    await authService.upsertPassword(user.user_id, user.email, password);
+
+    const loginToken = authService.generateJwtToken({
+      user_id: user.user_id,
+      email: user.email,
+      role: user.user_role,
+    });
+
+    res.cookie("token", loginToken, buildAuthCookieOptions(60 * 60 * 1000));
+
+    return res.json({
+      message: "Password set successfully",
+      token: loginToken,
+      user: {
+        id: user.user_id,
+        email: user.email,
+        role: user.user_role,
+        full_name: user.full_name,
+      },
+    });
+  } catch (err) {
+    console.error("Customer password setup error:", err);
+    res.status(500).json({ error: "Failed to set password" });
+  }
+};
+
+// ==========================
 // FIREBASE VERIFY
 // ==========================
 exports.verifyFirebase = async (req, res) => {

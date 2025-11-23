@@ -14,7 +14,7 @@ exports.getAllSalons = async (req, res) => {
     let sql = `
       SELECT 
         s.salon_id,
-        s.name,
+        COALESCE(s.name, s.salon_name) AS name,
         s.slug,
         s.address,
         s.city,
@@ -34,7 +34,8 @@ exports.getAllSalons = async (req, res) => {
     const params = [];
     
     if (q) {
-      sql += " AND (s.name LIKE ? OR s.description LIKE ? OR s.city LIKE ?)";
+      sql +=
+        " AND (COALESCE(s.name, s.salon_name) LIKE ? OR s.description LIKE ? OR s.city LIKE ?)";
       params.push(`%${q}%`, `%${q}%`, `%${q}%`);
     }
     
@@ -157,11 +158,18 @@ exports.getDailySchedule = async (req, res) => {
   }
   try {
     const schedule = await query(
-      `SELECT a.appointment_id, a.start_time, a.end_time, c.name AS customer_name, s.service_name
-                FROM appointments a
-                JOIN customers c ON a.customer_id = c.customer_id
-                JOIN services s ON a.service_id = s.service_id
-                WHERE a.staff_id = ? AND DATE(a.start_time) = ?`,
+      `SELECT 
+         a.appointment_id, 
+         a.scheduled_time AS start_time,
+         a.scheduled_time AS end_time,
+         cu.full_name AS customer_name, 
+         GROUP_CONCAT(s.custom_name SEPARATOR ', ') AS service_name
+       FROM appointments a
+       LEFT JOIN users cu ON a.user_id = cu.user_id
+       LEFT JOIN appointment_services aps ON a.appointment_id = aps.appointment_id
+       LEFT JOIN services s ON aps.service_id = s.service_id
+       WHERE a.staff_id = ? AND DATE(a.scheduled_time) = ?
+       GROUP BY a.appointment_id`,
       [staffId, date]
     );
     res.json(schedule);

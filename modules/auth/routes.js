@@ -13,6 +13,10 @@ const { db } = require("../../config/database");
 
 router.post("/signup", authController.signupManual);
 router.post("/login", authController.loginManual);
+router.post(
+  "/customer/set-password",
+  authController.setCustomerPasswordFromToken
+);
 
 router.get("/profile", verifyCustomJwt, (req, res) => {
   res.json({

@@ -143,14 +143,36 @@ exports.bookAppointment = async (user_id, salon_id, staff_id, service_id, schedu
   }
   
   const result = await db.query(
-    `INSERT INTO appointments (user_id, salon_id, staff_id, service_id, scheduled_time, status)
-     VALUES (?, ?, ?, ?, ?, 'booked')`,
-    [user_id, salon_id, staff_id, service_id, scheduled_time]
+    `INSERT INTO appointments (user_id, salon_id, staff_id, scheduled_time, status)
+     VALUES (?, ?, ?, ?, 'booked')`,
+    [user_id, salon_id, staff_id, scheduled_time]
   );
   // MySQL2 returns [result, fields] where result has insertId
   const insertResult = Array.isArray(result) ? result[0] : result;
   if (insertResult && insertResult.insertId) {
-    return insertResult.insertId;
+    const appointmentId = insertResult.insertId;
+
+    if (service_id) {
+      // add entry in appointment_services for pricing/duration
+      const [svc] = await db.query(
+        "SELECT duration, price FROM services WHERE service_id = ?",
+        [service_id]
+      );
+      await db.query(
+        `
+        INSERT INTO appointment_services (appointment_id, service_id, duration, price)
+        VALUES (?, ?, ?, ?)
+        `,
+        [
+          appointmentId,
+          service_id,
+          svc?.[0]?.duration || null,
+          svc?.[0]?.price || null,
+        ]
+      );
+    }
+
+    return appointmentId;
   }
   return null;
 };
@@ -191,11 +213,18 @@ exports.cancelAppointment = async (appointment_id) => {
 
 exports.getBarberSchedule = async (staff_id) => {
   const [apps] = await db.query(
-    `SELECT a.appointment_id, a.status, a.scheduled_time, s.custom_name AS service_name, u.full_name AS customer_name
+    `SELECT 
+        a.appointment_id, 
+        a.status, 
+        a.scheduled_time, 
+        GROUP_CONCAT(s.custom_name SEPARATOR ', ') AS service_name, 
+        u.full_name AS customer_name
      FROM appointments a
-     LEFT JOIN services s ON a.service_id = s.service_id
+     LEFT JOIN appointment_services aps ON a.appointment_id = aps.appointment_id
+     LEFT JOIN services s ON aps.service_id = s.service_id
      LEFT JOIN users u ON a.user_id = u.user_id
      WHERE a.staff_id = ? AND DATE(a.scheduled_time) = CURDATE() AND a.status = 'booked'
+     GROUP BY a.appointment_id
      ORDER BY a.scheduled_time`,
     [staff_id]
   );
@@ -221,4 +250,3 @@ exports.blockTimeSlot = async (staff_id, start_datetime, end_datetime, reason) =
   );
   return result.insertId;
 };
-

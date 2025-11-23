@@ -37,6 +37,20 @@ async function createAuthRecord(userId, email, password) {
   );
 }
 
+async function upsertPassword(userId, email, password) {
+  const hash = await bcrypt.hash(password, 10);
+  await db.query(
+    `
+    INSERT INTO auth (user_id, email, password_hash)
+    VALUES (?, ?, ?)
+    ON DUPLICATE KEY UPDATE
+      password_hash = VALUES(password_hash),
+      email = VALUES(email)
+    `,
+    [userId, email, hash]
+  );
+}
+
 async function verifyPassword(password, hash) {
   console.log("Incoming password:", password);
   console.log("Stored hash:", hash);
@@ -224,6 +238,7 @@ module.exports = {
   createAuthRecord,
   verifyPassword,
   updateLoginStats,
+  upsertPassword,
   generateJwtToken,
 
   // Firebase
